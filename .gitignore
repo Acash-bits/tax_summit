@@ -1,2 +1,6 @@
 # Evironment Variables
 .env
+
+#Contacts File
+*.txt
+*.vcf
