@@ -77,9 +77,9 @@ N:{last_name};{first_name};;;
     if email:
         vcard += f"EMAIL;TYPE=WORK:{email}\n"
     
-    # Add organization (company name)
-    if client_name:
-        vcard += f"ORG:{sanitize_vcard_text(client_name)}\n"
+    # # Add organization (company name)
+    # if client_name:
+    #     vcard += f"ORG:{sanitize_vcard_text(client_name)}\n"
     
     vcard += "END:VCARD"
     
