@@ -75,8 +75,8 @@ def insert_data_to_mysql(connection, table_name, df):
     placeholders = ', '.join(['%s'] * len(df.columns))
     insert_query = f"INSERT IGNORE INTO `{table_name}` ({cols}) VALUES ({placeholders})"
     
-    # Convert DataFrame to list of tuples
-    data = [tuple(row) for row in df.values]
+    # Convert DataFrame to list of tuples, replacing NaN with None
+    data = [tuple(None if pd.isna(x) else x for x in row) for row in df.values]
     
     try:
         cursor.executemany(insert_query, data)
@@ -109,8 +109,8 @@ def upsert_data_to_mysql(connection, table_name, df, unique_column='company_name
     ON DUPLICATE KEY UPDATE {update_clause}
     """
     
-    # Convert DataFrame to list of tuples
-    data = [tuple(row) for row in df.values]
+    # Convert DataFrame to list of tuples, replacing NaN with None
+    data = [tuple(None if pd.isna(x) else x for x in row) for row in df.values]
     
     try:
         cursor.executemany(upsert_query, data)
