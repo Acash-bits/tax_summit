@@ -35,12 +35,22 @@ def create_table_from_dataframe(connection, table_name, df, unique_column='compa
     for col in df.columns:
         # Simple type mapping - adjust as needed
         dtype = df[col].dtype
-        if dtype == 'int64':
+
+        # Check max length of text data in this column
+        if dtype == 'object':  # Text data
+            max_len = df[col].astype(str).str.len().max()
+            if pd.isna(max_len):
+                max_len = 255
+            else:
+                # Add buffer and round up
+                max_len = min(int(max_len * 1.5) + 50, 1000)
+            col_type = f'VARCHAR({max_len})'
+        elif dtype == 'int64':
             col_type = 'INT'
         elif dtype == 'float64':
             col_type = 'FLOAT'
         else:
-            col_type = 'VARCHAR(255)'
+            col_type = 'TEXT'  # Fallback for very long text
         
         # Add UNIQUE constraint to company_name column
         if col.lower() == unique_column.lower():
