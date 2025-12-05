@@ -1,0 +1,1 @@
+web: gunicorn analysis_dashboard:server --bind 0.0.0.0:$PORT

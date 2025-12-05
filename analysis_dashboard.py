@@ -16,6 +16,7 @@ load_dotenv()
 
 # Initialize Dash app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])
+server = app.server
 app.title = "Tax Summit Analytics Dashboard"
 app.config.suppress_callback_exceptions = True
 
@@ -716,4 +717,5 @@ def export_other_table(n_clicks, data):
         return dcc.send_data_frame(df.to_excel, "other_contacts_data.xlsx", index=False)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8050)
+    port = int(os.getenv("PORT", 8050))
+    app.run(debug=False, host='0.0.0.0', port=port)  

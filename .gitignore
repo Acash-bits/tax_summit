@@ -1,6 +1,9 @@
-# Evironment Variables
 .env
-
-#Contacts File
-*.txt
-*.vcf
+*.xlsx
+*.xls
+*.csv
+__pycache__/
+*.pyc
+*.db
+venv/
+.vscode/
