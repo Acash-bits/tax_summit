@@ -18,7 +18,7 @@ load_dotenv()
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])
 server = app.server
 app.title = "Tax Summit Analytics Dashboard"
-app.config.suppress_callback_exceptions = True
+app.config['suppress_callback_exceptions'] = True
 
 # Database connection
 def get_db_connection():
@@ -36,7 +36,8 @@ def get_db_connection():
 def fetch_master_data():
     conn = get_db_connection()
     if conn:
-        df = pd.read_sql("SELECT * FROM tax_summit_master_data", conn)
+        table_name = os.getenv("DB_TABLE", "tax_summit_master_data")
+        df = pd.read_sql(f"SELECT * FROM {table_name}", conn)
         conn.close()
         return df
     return pd.DataFrame()
