@@ -132,6 +132,50 @@ def upsert_data_to_mysql(connection, table_name, df, unique_column='company_name
     finally:
         cursor.close()
 
+def smart_sync_with_deletions(connection, table_name, df, unique_column):
+    """
+    Smart sync: Add new, update existing, delete removed
+    """
+    cursor = connection.cursor()
+    
+    try:
+        # Get all company names currently in database
+        cursor.execute(f"SELECT `{unique_column}` FROM `{table_name}`")
+        db_companies = {row[0] for row in cursor.fetchall()}
+        
+        # Get all company names in Excel
+        excel_companies = set(df[unique_column].dropna().unique())
+        
+        # Find companies to delete (in DB but not in Excel)
+        companies_to_delete = db_companies - excel_companies
+        
+        if companies_to_delete:
+            print(f"\nFound {len(companies_to_delete)} companies to DELETE:")
+            for company in list(companies_to_delete)[:10]:  # Show first 10
+                print(f"  - {company}")
+            if len(companies_to_delete) > 10:
+                print(f"  ... and {len(companies_to_delete) - 10} more")
+            
+            # Delete removed companies
+            delete_query = f"DELETE FROM `{table_name}` WHERE `{unique_column}` = %s"
+            for company in companies_to_delete:
+                cursor.execute(delete_query, (company,))
+            
+            connection.commit()
+            print(f"✓ Deleted {len(companies_to_delete)} companies from database")
+        else:
+            print("✓ No companies to delete")
+        
+        # Now do regular upsert for add/update
+        print("\nProcessing additions and updates...")
+        upsert_data_to_mysql(connection, table_name, df, unique_column)
+        
+    except Error as e:
+        print(f"Error in smart sync: {e}")
+        connection.rollback()
+    finally:
+        cursor.close()
+
 def excel_to_mysql(excel_file, sheet_name, host, user, password, database, table_name, unique_column='company_name', sync_mode='upsert'):
     """
     Main function to transfer data from Excel to MySQL
@@ -204,12 +248,16 @@ def excel_to_mysql(excel_file, sheet_name, host, user, password, database, table
         create_table_from_dataframe(connection, table_name, df, unique_column_clean)
         
         # Sync data based on mode
+        # Sync data based on mode
         if sync_mode == 'upsert':
-            print("Using UPSERT mode: Will insert new records and update existing ones")
-            upsert_data_to_mysql(connection, table_name, df, unique_column_clean)
-        else:
+            print("Using SMART SYNC mode: Will insert new, update existing, and delete removed")
+            smart_sync_with_deletions(connection, table_name, df, unique_column_clean)
+        elif sync_mode == 'insert':
             print("Using INSERT mode: Will only add new records, skip duplicates")
             insert_data_to_mysql(connection, table_name, df)
+        else:
+            print("Using basic UPSERT mode: Will insert new records and update existing ones")
+            upsert_data_to_mysql(connection, table_name, df, unique_column_clean)
         
     finally:
         if connection.is_connected():
