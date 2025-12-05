@@ -23,11 +23,13 @@ app.config['suppress_callback_exceptions'] = True
 # Database connection
 def get_db_connection():
     try:
+        port = int(os.getenv("DB_PORT", 3306))
         return mysql.connector.connect(
             host=os.getenv("DB_HOST"),
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASS"),
-            database=os.getenv("DB_NAME")
+            database=os.getenv("DB_NAME"),
+            port = port
         )
     except Error as e:
         print(f"Error: {e}")

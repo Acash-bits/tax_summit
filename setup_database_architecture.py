@@ -9,11 +9,13 @@ load_dotenv()
 def connect_to_mysql(host, user, password, database):
     """Establish connection to MySQL database"""
     try:
+        port = int(os.getenv("DB_PORT", 3306))
         connection = mysql.connector.connect(
             host=host,
             user=user,
             password=password,
-            database=database
+            database=database,
+            port = port
         )
         if connection.is_connected():
             print(f"✓ Connected to MySQL database: {database}")
