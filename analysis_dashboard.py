@@ -73,6 +73,40 @@ def calculate_conversion_rate(registrations, invitees):
 
 COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f']
 
+def get_region(location):
+    """Map location to region"""
+    if pd.isna(location) or location is None:
+        return 'Unknown'
+    location = str(location).strip().title()
+    
+    # Define region mappings based on actual data
+    north = ['Delhi', 'New Delhi', 'Gurugram', 'Gurgaon', 'Noida', 'Faridabad', 'Manesar', 'Bawal']
+    
+    south = ['Bangalore', 'Chennai', 'Hyderabad', 'Visakhapatnam', 'Kochi', 'Mangalore', 
+             'Tirupati', 'Chengalpattu']
+    
+    east = ['Kolkata', 'Jamshedpur', 'Orrisa', 'Odisha']
+    
+    west = ['Mumbai', 'Pune', 'Ahmedabad', 'Surat', 'Aurangabad', 'Silvassa', 'Maharashtra', 
+            'Nagpur', 'Kota', 'Udaipur', 'Wasim', 'Vapi']
+    
+    # Note: Paris is international, will go to 'Other'
+    
+    for city in north:
+        if city.lower() in location.lower():
+            return 'North'
+    for city in south:
+        if city.lower() in location.lower():
+            return 'South'
+    for city in east:
+        if city.lower() in location.lower():
+            return 'East'
+    for city in west:
+        if city.lower() in location.lower():
+            return 'West'
+    
+    return 'Other' # Covers international and unmapped locations
+
 # Layout components
 def create_summary_card(title, value, icon, color="primary"):
     return dbc.Card([
@@ -232,10 +266,6 @@ def load_data(n):
     
     if master_df.empty:
         return [], [], [], [], [], {}, {}, {}, {}
-
-
-    if master_df.empty:
-        return [], [], [], [], [], {}, {}, {}, {}
     
     ph_opts = [{'label': x, 'value': x} for x in master_df['Practice_Head'].dropna().unique()]
     partner_opts = [{'label': x, 'value': x} for x in master_df['Partner'].dropna().unique()]
@@ -325,9 +355,9 @@ def create_overview_tab(df):
     # Add region analysis
     df['Region'] = df['Location'].apply(get_region)
 
-    # # Temporary: Print unique locations to see what's in our data
-    # print("Unique Locations:", df['Location'].unique())
-    # print("\nLocation counts:", df['Location'].value_counts())
+    # Temporary: Print unique locations to see what's in your data
+    print("Unique Locations:", df['Location'].unique())
+    print("\nLocation counts:", df['Location'].value_counts())
     
     region_counts = df['Region'].value_counts().reset_index()
     region_counts.columns = ['Region', 'Count']
@@ -710,39 +740,6 @@ def create_metrics_tab(df):
         ])
     ])
 
-def get_region(location):
-    """Map location to region"""
-    if pd.isna(location) or location is None:
-        return 'Unknown'
-    location = str(location).strip().title()
-    
-    # Define region mappings based on actual data
-    north = ['Delhi', 'New Delhi', 'Gurugram', 'Gurgaon', 'Noida', 'Faridabad', 'Manesar', 'Bawal']
-    
-    south = ['Bangalore', 'Chennai', 'Hyderabad', 'Visakhapatnam', 'Kochi', 'Mangalore', 
-             'Tirupati', 'Chengalpattu']
-    
-    east = ['Kolkata', 'Jamshedpur', 'Orrisa', 'Odisha']
-    
-    west = ['Mumbai', 'Pune', 'Ahmedabad', 'Surat', 'Aurangabad', 'Silvassa', 'Maharashtra', 
-            'Nagpur', 'Kota', 'Udaipur', 'Wasim', 'Vapi']
-    
-    # Note: Paris is international, will go to 'Other'
-    
-    for city in north:
-        if city.lower() in location.lower():
-            return 'North'
-    for city in south:
-        if city.lower() in location.lower():
-            return 'South'
-    for city in east:
-        if city.lower() in location.lower():
-            return 'East'
-    for city in west:
-        if city.lower() in location.lower():
-            return 'West'
-    
-    return 'Other' # Other for International Locations
 
 # Export callbacks
 @app.callback(
