@@ -352,14 +352,11 @@ def create_overview_tab(df):
         lambda r: calculate_conversion_rate(r['numRegistrations'], r['numInvitees']), axis=1
     )
 
-    # Add region analysis
-    df['Region'] = df['Location'].apply(get_region)
-
-    # Temporary: Print unique locations to see what's in your data
-    print("Unique Locations:", df['Location'].unique())
-    print("\nLocation counts:", df['Location'].value_counts())
+    # Add region analysis - filter out None/NaN locations first
+    df_with_location = df[df['Location'].notna()].copy()
+    df_with_location['Region'] = df_with_location['Location'].apply(get_region)
     
-    region_counts = df['Region'].value_counts().reset_index()
+    region_counts = df_with_location['Region'].value_counts().reset_index()
     region_counts.columns = ['Region', 'Count']
     
     return html.Div([
