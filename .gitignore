@@ -19,4 +19,4 @@ __pycache__/
 Thumbs.db
 
 # Json
-.json
+sync_state.json
