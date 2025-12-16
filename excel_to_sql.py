@@ -134,6 +134,53 @@ def upsert_data_to_mysql(connection, table_name, df, unique_column='company_name
     finally:
         cursor.close()
 
+def sync_table_schema(connection, table_name, df):
+    """Add any missing columns from DataFrame to existing table"""
+    cursor = connection.cursor()
+    
+    try:
+        # Get existing columns from database
+        cursor.execute(f"SHOW COLUMNS FROM `{table_name}`")
+        existing_cols = {row[0] for row in cursor.fetchall()}
+        
+        # Find columns in DataFrame that don't exist in table
+        df_cols = set(df.columns)
+        missing_cols = df_cols - existing_cols
+        
+        if missing_cols:
+            print(f"Adding {len(missing_cols)} missing columns: {missing_cols}")
+            
+            for col in missing_cols:
+                # Determine column type
+                dtype = df[col].dtype
+                if dtype == 'object':
+                    max_len = df[col].astype(str).str.len().max()
+                    if pd.isna(max_len):
+                        max_len = 255
+                    else:
+                        max_len = min(int(max_len * 1.5) + 50, 1000)
+                    col_type = f'VARCHAR({max_len})'
+                elif dtype == 'int64':
+                    col_type = 'INT'
+                elif dtype == 'float64':
+                    col_type = 'FLOAT'
+                else:
+                    col_type = 'TEXT'
+                
+                alter_query = f"ALTER TABLE `{table_name}` ADD COLUMN `{col}` {col_type}"
+                cursor.execute(alter_query)
+                print(f"  Added column: {col} ({col_type})")
+            
+            connection.commit()
+        else:
+            print("✓ Table schema is up to date")
+            
+    except Error as e:
+        print(f"Error syncing schema: {e}")
+        connection.rollback()
+    finally:
+        cursor.close()
+
 def smart_sync_with_deletions(connection, table_name, df, unique_column):
     """
     Smart sync: Add new, update existing, delete removed
@@ -249,7 +296,8 @@ def excel_to_mysql(excel_file, sheet_name, host, user, password, database, table
         # Create table with unique constraint
         create_table_from_dataframe(connection, table_name, df, unique_column_clean)
         
-        # Sync data based on mode
+        sync_table_schema(connection, table_name, df)
+
         # Sync data based on mode
         if sync_mode == 'upsert':
             print("Using SMART SYNC mode: Will insert new, update existing, and delete removed")
