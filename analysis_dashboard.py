@@ -205,6 +205,35 @@ def load_data(n):
     master_df = fetch_master_data()
     tax_df, cfo_df, other_df = fetch_analysis_tables()
     
+    # Standardize names to Title format
+    if not master_df.empty:
+        name_columns = ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector']
+        for col in name_columns:
+            if col in master_df.columns:
+                master_df[col] = master_df[col].apply(lambda x: str(x).strip().title() if pd.notna(x) else x)
+    
+    if not tax_df.empty:
+        name_columns = ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector', 'Person_Name']
+        for col in name_columns:
+            if col in tax_df.columns:
+                tax_df[col] = tax_df[col].apply(lambda x: str(x).strip().title() if pd.notna(x) else x)
+    
+    if not cfo_df.empty:
+        name_columns = ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector', 'Person_Name']
+        for col in name_columns:
+            if col in cfo_df.columns:
+                cfo_df[col] = cfo_df[col].apply(lambda x: str(x).strip().title() if pd.notna(x) else x)
+    
+    if not other_df.empty:
+        name_columns = ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector', 'Person_Name']
+        for col in name_columns:
+            if col in other_df.columns:
+                other_df[col] = other_df[col].apply(lambda x: str(x).strip().title() if pd.notna(x) else x)
+    
+    if master_df.empty:
+        return [], [], [], [], [], {}, {}, {}, {}
+
+
     if master_df.empty:
         return [], [], [], [], [], {}, {}, {}, {}
     
@@ -292,6 +321,16 @@ def create_overview_tab(df):
     sector_perf['Conversion'] = sector_perf.apply(
         lambda r: calculate_conversion_rate(r['numRegistrations'], r['numInvitees']), axis=1
     )
+
+    # Add region analysis
+    df['Region'] = df['Location'].apply(get_region)
+
+    # # Temporary: Print unique locations to see what's in our data
+    # print("Unique Locations:", df['Location'].unique())
+    # print("\nLocation counts:", df['Location'].value_counts())
+    
+    region_counts = df['Region'].value_counts().reset_index()
+    region_counts.columns = ['Region', 'Count']
     
     return html.Div([
         dbc.Row([
@@ -307,15 +346,23 @@ def create_overview_tab(df):
                     dbc.CardHeader("Response Distribution"),
                     dbc.CardBody(dcc.Graph(figure=px.pie(values=resp_dist.values, names=resp_dist.index, hole=0.4)))
                 ], className="shadow-sm")
-            ], md=6),
+            ], md=4),
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader("Sector Performance"),
                     dbc.CardBody(dcc.Graph(figure=px.bar(sector_perf, x='Sector', y='Conversion', 
                                                         color='Conversion', color_continuous_scale='Viridis')))
                 ], className="shadow-sm")
-            ], md=6),
+            ], md=4),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader("Region-wise Distribution"),
+                    dbc.CardBody(dcc.Graph(figure=px.bar(region_counts, x='Region', y='Count',
+                                                          color='Region', color_discrete_sequence=COLORS)))
+                ], className="shadow-sm")
+            ], md=4),
         ])
+        
     ])
 
 def create_practice_head_tab(df, tax_df, cfo_df, other_df):
@@ -662,6 +709,40 @@ def create_metrics_tab(df):
             ], md=6),
         ])
     ])
+
+def get_region(location):
+    """Map location to region"""
+    if pd.isna(location) or location is None:
+        return 'Unknown'
+    location = str(location).strip().title()
+    
+    # Define region mappings based on actual data
+    north = ['Delhi', 'New Delhi', 'Gurugram', 'Gurgaon', 'Noida', 'Faridabad', 'Manesar', 'Bawal']
+    
+    south = ['Bangalore', 'Chennai', 'Hyderabad', 'Visakhapatnam', 'Kochi', 'Mangalore', 
+             'Tirupati', 'Chengalpattu']
+    
+    east = ['Kolkata', 'Jamshedpur', 'Orrisa', 'Odisha']
+    
+    west = ['Mumbai', 'Pune', 'Ahmedabad', 'Surat', 'Aurangabad', 'Silvassa', 'Maharashtra', 
+            'Nagpur', 'Kota', 'Udaipur', 'Wasim', 'Vapi']
+    
+    # Note: Paris is international, will go to 'Other'
+    
+    for city in north:
+        if city.lower() in location.lower():
+            return 'North'
+    for city in south:
+        if city.lower() in location.lower():
+            return 'South'
+    for city in east:
+        if city.lower() in location.lower():
+            return 'East'
+    for city in west:
+        if city.lower() in location.lower():
+            return 'West'
+    
+    return 'Other' # Other for International Locations
 
 # Export callbacks
 @app.callback(
