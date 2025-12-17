@@ -57,7 +57,7 @@ def get_db_connection():
             
     except Error as e:
         print(f"❌ Database connection failed: {e}")
-        return Non
+        return None
 
 def fetch_master_data():
     conn = get_db_connection()
@@ -149,6 +149,39 @@ def get_region(location):
             return 'West'
     
     return 'Other' # Covers international and unmapped locations
+
+# To normalize response labels
+def normalize_response_label(response):
+    """Normalize response labels by removing numeric prefixes"""
+    if pd.isna(response) or response is None:
+        return response
+    
+    response_str = str(response).strip().title()
+    
+    # Remove numeric prefixes like "2 Positive" -> "Positive"
+    import re
+    match = re.match(r'^(\d+)\s+(.+)$', response_str)
+    if match:
+        return match.group(2)  # Return just the label part
+    
+    return response_str
+
+
+# To handle the weight/multiplier in responses like "2 Positive" or any other numeric prefix
+def get_response_weight(response):
+    """Get the weight/multiplier for a response (e.g., '2 Positive' returns 2)"""
+    if pd.isna(response) or response is None:
+        return 1
+    
+    response_str = str(response).strip()
+    
+    # Extract numeric prefix
+    import re
+    match = re.match(r'^(\d+)\s+', response_str)
+    if match:
+        return int(match.group(1))
+    
+    return 1  # Default weight is 1
 
 # Layout components
 def create_summary_card(title, value, icon, color="primary"):
@@ -308,6 +341,26 @@ def load_data(n):
             if col in other_df.columns:
                 other_df[col] = other_df[col].apply(lambda x: str(x).strip().title() if pd.notna(x) else x)
     
+        # After standardizing master_df
+    if not master_df.empty and 'Response' in master_df.columns:
+        master_df['Response_Weight'] = master_df['Response'].apply(get_response_weight)
+        master_df['Response'] = master_df['Response'].apply(normalize_response_label)
+
+    # After standardizing tax_df
+    if not tax_df.empty and 'Response' in tax_df.columns:
+        tax_df['Response_Weight'] = tax_df['Response'].apply(get_response_weight)
+        tax_df['Response'] = tax_df['Response'].apply(normalize_response_label)
+
+    # After standardizing cfo_df
+    if not cfo_df.empty and 'Response' in cfo_df.columns:
+        cfo_df['Response_Weight'] = cfo_df['Response'].apply(get_response_weight)
+        cfo_df['Response'] = cfo_df['Response'].apply(normalize_response_label)
+
+    # After standardizing other_df
+    if not other_df.empty and 'Response' in other_df.columns:
+        other_df['Response_Weight'] = other_df['Response'].apply(get_response_weight)
+        other_df['Response'] = other_df['Response'].apply(normalize_response_label)
+    
     if master_df.empty:
         return [], [], [], [], [], {}, {}, {}, {}
     
@@ -386,7 +439,8 @@ def create_overview_tab(df):
     total_reg = df['numRegistrations'].apply(safe_int).sum()
     resp_rate = round((df['Response'].notna().sum() / len(df) * 100), 2) if len(df) > 0 else 0
     
-    resp_dist = df['Response'].value_counts()
+    # Weighted response distribution
+    resp_dist = df.groupby('Response')['Response_Weight'].sum()
     
     sector_perf = df.groupby('Sector').agg({
         'numInvitees': lambda x: x.apply(safe_int).sum(),
@@ -446,14 +500,14 @@ def create_practice_head_tab(df, tax_df, cfo_df, other_df):
     }).reset_index()
     ph_stats.columns = ['Practice_Head', 'Invites_Sent', 'Invitees', 'Registrations', 'Responses']
     
-    response_by_ph = df.groupby(['Practice_Head', 'Response']).size().reset_index(name='Count')
+    response_by_ph = df.groupby(['Practice_Head', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
     sector_by_ph = df.groupby(['Practice_Head', 'Sector']).size().reset_index(name='Count')
     location_by_ph = df.groupby(['Practice_Head', 'Location']).size().reset_index(name='Count')
     
-    tax_by_ph = tax_df.groupby(['Practice_Head', 'Response']).size().reset_index(name='Count')
-    cfo_by_ph = cfo_df.groupby(['Practice_Head', 'Response']).size().reset_index(name='Count')
-    other_by_ph = other_df.groupby(['Practice_Head', 'Response']).size().reset_index(name='Count')
-    
+    cfo_by_ph = cfo_df.groupby(['Practice_Head', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    tax_by_ph = tax_df.groupby(['Practice_Head', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    other_by_ph = other_df.groupby(['Practice_Head', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+
     return html.Div([
         html.H4("Practice Head Analysis", className="mb-4"),
         
@@ -538,13 +592,13 @@ def create_partner_tab(df, tax_df, cfo_df, other_df):
     }).reset_index()
     partner_stats.columns = ['Partner', 'Invites_Sent', 'Invitees', 'Registrations', 'Responses']
     
-    response_by_partner = df.groupby(['Partner', 'Response']).size().reset_index(name='Count')
+    response_by_partner = df.groupby(['Partner', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
     location_by_partner = df.groupby(['Partner', 'Location']).size().reset_index(name='Count')
     
-    tax_by_partner = tax_df.groupby(['Partner', 'Response']).size().reset_index(name='Count')
-    cfo_by_partner = cfo_df.groupby(['Partner', 'Response']).size().reset_index(name='Count')
-    other_by_partner = other_df.groupby(['Partner', 'Response']).size().reset_index(name='Count')
-    
+    tax_by_partner = tax_df.groupby(['Partner', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    cfo_by_partner = cfo_df.groupby(['Partner', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    other_by_partner = other_df.groupby(['Partner', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+
     return html.Div([
         html.H4("Partner Analysis", className="mb-4"),
         
@@ -614,7 +668,7 @@ def create_partner_tab(df, tax_df, cfo_df, other_df):
 def create_tax_tab(tax_df):
     total = len(tax_df)
     registered = tax_df['numRegistrations'].apply(safe_int).sum()
-    responses = tax_df['Response'].value_counts()
+    responses = tax_df.groupby('Response')['Response_Weight'].sum()
     
     return html.Div([
         html.H4("Tax Contacts Analysis", className="mb-4"),
@@ -637,7 +691,7 @@ def create_tax_tab(tax_df):
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader("Registrations by Response"),
-                    dbc.CardBody(dcc.Graph(figure=px.bar(responses.reset_index(), x='Response', y='count')))
+                    dbc.CardBody(dcc.Graph(figure=px.bar(responses.reset_index(), x='Response', y='Response_Weight')))
                 ], className="shadow-sm")
             ], md=6),
         ], className="mb-4"),
@@ -647,7 +701,7 @@ def create_tax_tab(tax_df):
 def create_cfo_tab(cfo_df):
     total = len(cfo_df)
     registered = cfo_df['numRegistrations'].apply(safe_int).sum()
-    responses = cfo_df['Response'].value_counts()
+    responses = cfo_df.groupby('Response')['Response_Weight'].sum()
     
     return html.Div([
         html.H4("CFO Contacts Analysis", className="mb-4"),
@@ -681,7 +735,7 @@ def create_cfo_tab(cfo_df):
 def create_other_tab(other_df):
     total = len(other_df)
     registered = other_df['numRegistrations'].apply(safe_int).sum()
-    responses = other_df['Response'].value_counts()
+    responses = other_df.groupby('Response')['Response_Weight'].sum()
     
     return html.Div([
         html.H4("Other Contacts Analysis", className="mb-4"),
@@ -764,8 +818,8 @@ def create_metrics_tab(df):
                     dbc.CardHeader("Response Status Breakdown"),
                     dbc.CardBody(dcc.Graph(
                         figure=px.bar(
-                            df['Response'].value_counts().reset_index(),
-                            x='Response', y='count',
+                            df.groupby('Response')['Response_Weight'].sum().reset_index(),
+                            x='Response', y='Response_Weight',
                             color='Response',
                             title="Response Distribution"
                         )
@@ -776,6 +830,7 @@ def create_metrics_tab(df):
     ])
 
 
+''' This section is commented out as data table exports are currently not in use.
 # Export callbacks
 @app.callback(
     Output("ph-table-download", "data"),
@@ -831,7 +886,8 @@ def export_other_table(n_clicks, data):
     if n_clicks:
         df = pd.DataFrame(data)
         return dcc.send_data_frame(df.to_excel, "other_contacts_data.xlsx", index=False)
-
+'''
+        
 @app.server.route('/health')
 def health_check():
     conn = get_db_connection()
