@@ -670,6 +670,24 @@ def create_tax_tab(tax_df):
     registered = tax_df['numRegistrations'].apply(safe_int).sum()
     responses = tax_df.groupby('Response')['Response_Weight'].sum()
     
+    # Regional analysis
+    tax_df_with_location = tax_df[tax_df['Location'].notna()].copy()
+    tax_df_with_location['Region'] = tax_df_with_location['Location'].apply(get_region)
+    
+    # Count total and registered by region
+    region_data = []
+    for region in ['North', 'South', 'East', 'West', 'Other']:
+        region_df = tax_df_with_location[tax_df_with_location['Region'] == region]
+        total_in_region = len(region_df)
+        registered_in_region = region_df['numRegistrations'].apply(safe_int).sum()
+        region_data.append({
+            'Region': region,
+            'Total Invited': total_in_region,
+            'Registered': registered_in_region
+        })
+    
+    region_analysis_df = pd.DataFrame(region_data)
+    
     return html.Div([
         html.H4("Tax Contacts Analysis", className="mb-4"),
         
@@ -690,8 +708,11 @@ def create_tax_tab(tax_df):
             ], md=6),
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader("Registrations by Response"),
-                    dbc.CardBody(dcc.Graph(figure=px.bar(responses.reset_index(), x='Response', y='Response_Weight')))
+                    dbc.CardHeader("Regional Distribution - Tax Contacts"),
+                    dbc.CardBody(dcc.Graph(figure=go.Figure(data=[
+                        go.Bar(name='Total Invited', x=region_analysis_df['Region'], y=region_analysis_df['Total Invited']),
+                        go.Bar(name='Registered', x=region_analysis_df['Region'], y=region_analysis_df['Registered'])
+                    ]).update_layout(barmode='stack', xaxis_title='Region', yaxis_title='Count')))
                 ], className="shadow-sm")
             ], md=6),
         ], className="mb-4"),
@@ -702,6 +723,24 @@ def create_cfo_tab(cfo_df):
     total = len(cfo_df)
     registered = cfo_df['numRegistrations'].apply(safe_int).sum()
     responses = cfo_df.groupby('Response')['Response_Weight'].sum()
+    
+    # Regional analysis
+    cfo_df_with_location = cfo_df[cfo_df['Location'].notna()].copy()
+    cfo_df_with_location['Region'] = cfo_df_with_location['Location'].apply(get_region)
+    
+    # Count total and registered by region
+    region_data = []
+    for region in ['North', 'South', 'East', 'West', 'Other']:
+        region_df = cfo_df_with_location[cfo_df_with_location['Region'] == region]
+        total_in_region = len(region_df)
+        registered_in_region = region_df['numRegistrations'].apply(safe_int).sum()
+        region_data.append({
+            'Region': region,
+            'Total Invited': total_in_region,
+            'Registered': registered_in_region
+        })
+    
+    region_analysis_df = pd.DataFrame(region_data)
     
     return html.Div([
         html.H4("CFO Contacts Analysis", className="mb-4"),
@@ -723,19 +762,40 @@ def create_cfo_tab(cfo_df):
             ], md=6),
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader("CFO by Sector"),
-                    dbc.CardBody(dcc.Graph(figure=px.bar(cfo_df.groupby('Sector').size().reset_index(name='Count'), 
-                                                        x='Sector', y='Count')))
+                    dbc.CardHeader("Regional Distribution - CFO Contacts"),
+                    dbc.CardBody(dcc.Graph(figure=go.Figure(data=[
+                        go.Bar(name='Total Invited', x=region_analysis_df['Region'], y=region_analysis_df['Total Invited']),
+                        go.Bar(name='Registered', x=region_analysis_df['Region'], y=region_analysis_df['Registered'])
+                    ]).update_layout(barmode='stack', xaxis_title='Region', yaxis_title='Count')))
                 ], className="shadow-sm")
             ], md=6),
         ], className="mb-4"),
         
     ])
 
+
 def create_other_tab(other_df):
     total = len(other_df)
     registered = other_df['numRegistrations'].apply(safe_int).sum()
     responses = other_df.groupby('Response')['Response_Weight'].sum()
+    
+    # Regional analysis
+    other_df_with_location = other_df[other_df['Location'].notna()].copy()
+    other_df_with_location['Region'] = other_df_with_location['Location'].apply(get_region)
+    
+    # Count total and registered by region
+    region_data = []
+    for region in ['North', 'South', 'East', 'West', 'Other']:
+        region_df = other_df_with_location[other_df_with_location['Region'] == region]
+        total_in_region = len(region_df)
+        registered_in_region = region_df['numRegistrations'].apply(safe_int).sum()
+        region_data.append({
+            'Region': region,
+            'Total Invited': total_in_region,
+            'Registered': registered_in_region
+        })
+    
+    region_analysis_df = pd.DataFrame(region_data)
     
     return html.Div([
         html.H4("Other Contacts Analysis", className="mb-4"),
@@ -754,7 +814,16 @@ def create_other_tab(other_df):
                     dbc.CardHeader("Response Status Distribution"),
                     dbc.CardBody(dcc.Graph(figure=px.pie(values=responses.values, names=responses.index, hole=0.4)))
                 ], className="shadow-sm")
-            ], md=12),
+            ], md=6),
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader("Regional Distribution - Other Contacts"),
+                    dbc.CardBody(dcc.Graph(figure=go.Figure(data=[
+                        go.Bar(name='Total Invited', x=region_analysis_df['Region'], y=region_analysis_df['Total Invited']),
+                        go.Bar(name='Registered', x=region_analysis_df['Region'], y=region_analysis_df['Registered'])
+                    ]).update_layout(barmode='stack', xaxis_title='Region', yaxis_title='Count')))
+                ], className="shadow-sm")
+            ], md=6),
         ], className="mb-4"),
 
     ])
