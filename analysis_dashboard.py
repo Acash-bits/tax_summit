@@ -23,32 +23,41 @@ app.config['suppress_callback_exceptions'] = True
 # Database connection
 def get_db_connection():
     try:
-        # Check if running on Railway (Railway sets this variable)
-        if os.getenv("RAILWAY_ENVIRONMENT"):
-            # Use Railway variables
-            host = os.getenv("RAILWAY_DB_HOST") or os.getenv("MYSQLHOST")
-            user = os.getenv("RAILWAY_DB_USER") or os.getenv("MYSQLUSER")
-            password = os.getenv("RAILWAY_DB_PASS") or os.getenv("MYSQLPASSWORD")
-            database = os.getenv("RAILWAY_DB_NAME") or os.getenv("MYSQLDATABASE")
-            port = int(os.getenv("RAILWAY_DB_PORT", os.getenv("MYSQLPORT", 3306)))
+        # Check if Railway-specific variables exist
+        railway_host = os.getenv("MYSQLHOST")
+        
+        if railway_host:
+            # Running on Railway - use Railway's MySQL variables
+            host = railway_host
+            user = os.getenv("MYSQLUSER")
+            password = os.getenv("MYSQLPASSWORD")
+            database = os.getenv("MYSQLDATABASE")
+            port = int(os.getenv("MYSQLPORT", 3306))
+            print(f"🚂 Connecting to Railway MySQL: {host}:{port}/{database}")
         else:
-            # Use local variables
+            # Running locally - use custom variables
             host = os.getenv("DB_HOST")
             user = os.getenv("DB_USER")
             password = os.getenv("DB_PASS")
             database = os.getenv("DB_NAME")
             port = int(os.getenv("DB_PORT", 3306))
+            print(f"💻 Connecting to Local MySQL: {host}:{port}/{database}")
         
-        return mysql.connector.connect(
+        connection = mysql.connector.connect(
             host=host,
             user=user,
             password=password,
             database=database,
             port=port
         )
+        
+        if connection.is_connected():
+            print("✅ Database connection successful!")
+            return connection
+            
     except Error as e:
-        print(f"Error: {e}")
-        return None
+        print(f"❌ Database connection failed: {e}")
+        return Non
 
 def fetch_master_data():
     conn = get_db_connection()
