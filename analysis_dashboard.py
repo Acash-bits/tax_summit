@@ -23,13 +23,28 @@ app.config['suppress_callback_exceptions'] = True
 # Database connection
 def get_db_connection():
     try:
-        port = int(os.getenv("DB_PORT", 3306))
+        # Check if running on Railway (Railway sets this variable)
+        if os.getenv("RAILWAY_ENVIRONMENT"):
+            # Use Railway variables
+            host = os.getenv("RAILWAY_DB_HOST") or os.getenv("MYSQLHOST")
+            user = os.getenv("RAILWAY_DB_USER") or os.getenv("MYSQLUSER")
+            password = os.getenv("RAILWAY_DB_PASS") or os.getenv("MYSQLPASSWORD")
+            database = os.getenv("RAILWAY_DB_NAME") or os.getenv("MYSQLDATABASE")
+            port = int(os.getenv("RAILWAY_DB_PORT", os.getenv("MYSQLPORT", 3306)))
+        else:
+            # Use local variables
+            host = os.getenv("DB_HOST")
+            user = os.getenv("DB_USER")
+            password = os.getenv("DB_PASS")
+            database = os.getenv("DB_NAME")
+            port = int(os.getenv("DB_PORT", 3306))
+        
         return mysql.connector.connect(
-            host=os.getenv("DB_HOST"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASS"),
-            database=os.getenv("DB_NAME"),
-            port = port
+            host=host,
+            user=user,
+            password=password,
+            database=database,
+            port=port
         )
     except Error as e:
         print(f"Error: {e}")
