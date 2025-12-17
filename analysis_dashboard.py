@@ -208,6 +208,7 @@ def create_filter_panel():
         ])
     ], className="mb-4 shadow-sm")
 
+# Below is a commented-out function for creating data tables, which has been removed from use.
 # def create_data_table(df, table_id):
 #     if df.empty:
 #         return html.Div("No data available", className="text-muted text-center p-4")
@@ -404,7 +405,7 @@ def create_overview_tab(df):
     
     return html.Div([
         dbc.Row([
-            dbc.Col(create_summary_card("Total Invites", f"{total_invites:,}", "envelope", "primary"), md=3),
+            dbc.Col(create_summary_card("Total Clients", f"{total_invites:,}", "envelope", "primary"), md=3),
             dbc.Col(create_summary_card("Total Invitees", f"{total_invitees:,}", "users", "info"), md=3),
             dbc.Col(create_summary_card("Registrations", f"{total_reg:,}", "check-circle", "success"), md=3),
             dbc.Col(create_summary_card("Response Rate", f"{resp_rate}%", "percentage", "warning"), md=3),
@@ -457,7 +458,7 @@ def create_practice_head_tab(df, tax_df, cfo_df, other_df):
         html.H4("Practice Head Analysis", className="mb-4"),
         
         dbc.Row([
-            dbc.Col(create_summary_card("Total Invites", ph_stats['Invites_Sent'].sum(), "paper-plane", "primary"), md=3),
+            dbc.Col(create_summary_card("Total Clients", ph_stats['Invites_Sent'].sum(), "paper-plane", "primary"), md=3),
             dbc.Col(create_summary_card("Total Invitees", ph_stats['Invitees'].sum(), "users", "info"), md=3),
             dbc.Col(create_summary_card("Total Responses", ph_stats['Responses'].sum(), "comments", "warning"), md=3),
             dbc.Col(create_summary_card("Total Registrations", ph_stats['Registrations'].sum(), "check", "success"), md=3),
@@ -548,7 +549,7 @@ def create_partner_tab(df, tax_df, cfo_df, other_df):
         html.H4("Partner Analysis", className="mb-4"),
         
         dbc.Row([
-            dbc.Col(create_summary_card("Total Invites", partner_stats['Invites_Sent'].sum(), "paper-plane", "primary"), md=3),
+            dbc.Col(create_summary_card("Total Clients", partner_stats['Invites_Sent'].sum(), "paper-plane", "primary"), md=3),
             dbc.Col(create_summary_card("Total Invitees", partner_stats['Invitees'].sum(), "users", "info"), md=3),
             dbc.Col(create_summary_card("Total Responses", partner_stats['Responses'].sum(), "comments", "warning"), md=3),
             dbc.Col(create_summary_card("Total Registrations", partner_stats['Registrations'].sum(), "check", "success"), md=3),
@@ -751,7 +752,7 @@ def create_metrics_tab(df):
                     dbc.CardHeader("Conversion Funnel"),
                     dbc.CardBody(dcc.Graph(
                         figure=go.Figure(go.Funnel(
-                            y=['Total Invites', 'Total Invitees', 'Responses', 'Registrations'],
+                            y=['Total Clients', 'Total Invitees', 'Responses', 'Registrations'],
                             x=[len(df), total_invitees, df['Response'].notna().sum(), total_reg],
                             textinfo="value+percent initial"
                         ))
