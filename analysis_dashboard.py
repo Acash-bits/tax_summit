@@ -208,31 +208,31 @@ def create_filter_panel():
         ])
     ], className="mb-4 shadow-sm")
 
-def create_data_table(df, table_id):
-    if df.empty:
-        return html.Div("No data available", className="text-muted text-center p-4")
+# def create_data_table(df, table_id):
+#     if df.empty:
+#         return html.Div("No data available", className="text-muted text-center p-4")
     
-    return html.Div([
-        dbc.Row([
-            dbc.Col(html.H6([html.I(className="fas fa-table me-2"), "Detailed Data"], className="mb-3"), md=9),
-            dbc.Col(dbc.Button([html.I(className="fas fa-file-excel me-2"), "Export"], 
-                              id=f"{table_id}-export", color="success", size="sm", className="w-100"), md=3)
-        ]),
-        dash_table.DataTable(
-            id=table_id,
-            columns=[{"name": i, "id": i} for i in df.columns],
-            data=df.to_dict('records'),
-            page_size=10,
-            style_table={'overflowX': 'auto'},
-            style_cell={'textAlign': 'left', 'padding': '8px', 'fontSize': '12px'},
-            style_header={'backgroundColor': '#2c3e50', 'color': 'white', 'fontWeight': 'bold'},
-            style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
-            filter_action="native",
-            sort_action="native",
-            sort_mode="multi"
-        ),
-        dcc.Download(id=f"{table_id}-download")
-    ], className="mt-4")
+#     return html.Div([
+#         dbc.Row([
+#             dbc.Col(html.H6([html.I(className="fas fa-table me-2"), "Detailed Data"], className="mb-3"), md=9),
+#             dbc.Col(dbc.Button([html.I(className="fas fa-file-excel me-2"), "Export"], 
+#                               id=f"{table_id}-export", color="success", size="sm", className="w-100"), md=3)
+#         ]),
+#         dash_table.DataTable(
+#             id=table_id,
+#             columns=[{"name": i, "id": i} for i in df.columns],
+#             data=df.to_dict('records'),
+#             page_size=10,
+#             style_table={'overflowX': 'auto'},
+#             style_cell={'textAlign': 'left', 'padding': '8px', 'fontSize': '12px'},
+#             style_header={'backgroundColor': '#2c3e50', 'color': 'white', 'fontWeight': 'bold'},
+#             style_data_conditional=[{'if': {'row_index': 'odd'}, 'backgroundColor': '#f8f9fa'}],
+#             filter_action="native",
+#             sort_action="native",
+#             sort_mode="multi"
+#         ),
+#         dcc.Download(id=f"{table_id}-download")
+#     ], className="mt-4")
 
 # Main layout
 app.layout = dbc.Container([
@@ -526,8 +526,6 @@ def create_practice_head_tab(df, tax_df, cfo_df, other_df):
                 ], className="shadow-sm")
             ], md=4),
         ], className="mb-4"),
-        
-        create_data_table(ph_stats, "ph-table")
     ])
 
 def create_partner_tab(df, tax_df, cfo_df, other_df):
@@ -610,7 +608,6 @@ def create_partner_tab(df, tax_df, cfo_df, other_df):
             ], md=4),
         ], className="mb-4"),
         
-        create_data_table(partner_stats, "partner-table")
     ])
 
 def create_tax_tab(tax_df):
@@ -644,7 +641,6 @@ def create_tax_tab(tax_df):
             ], md=6),
         ], className="mb-4"),
         
-        create_data_table(tax_df, "tax-detail-table")
     ])
 
 def create_cfo_tab(cfo_df):
@@ -679,7 +675,6 @@ def create_cfo_tab(cfo_df):
             ], md=6),
         ], className="mb-4"),
         
-        create_data_table(cfo_df, "cfo-detail-table")
     ])
 
 def create_other_tab(other_df):
@@ -706,8 +701,7 @@ def create_other_tab(other_df):
                 ], className="shadow-sm")
             ], md=12),
         ], className="mb-4"),
-        
-        create_data_table(other_df, "other-detail-table")
+
     ])
 
 def create_metrics_tab(df):
