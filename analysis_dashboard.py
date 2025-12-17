@@ -73,12 +73,31 @@ def fetch_analysis_tables():
     if not conn:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
     
-    tax_df = pd.read_sql("SELECT * FROM Tax_Persons_Analysis", conn)
-    cfo_df = pd.read_sql("SELECT * FROM CFO_Persons_Analysis", conn)
-    other_df = pd.read_sql("SELECT * FROM Other_Persons_Analysis", conn)
-    conn.close()
-    
-    return tax_df, cfo_df, other_df
+    try:
+        # Try lowercase first (Railway), then uppercase (local)
+        try:
+            tax_df = pd.read_sql("SELECT * FROM tax_persons_analysis", conn)
+        except:
+            tax_df = pd.read_sql("SELECT * FROM Tax_Persons_Analysis", conn)
+        
+        try:
+            cfo_df = pd.read_sql("SELECT * FROM cfo_persons_analysis", conn)
+        except:
+            cfo_df = pd.read_sql("SELECT * FROM CFO_Persons_Analysis", conn)
+        
+        try:
+            other_df = pd.read_sql("SELECT * FROM other_persons_analysis", conn)
+        except:
+            other_df = pd.read_sql("SELECT * FROM Other_Persons_Analysis", conn)
+        
+        conn.close()
+        return tax_df, cfo_df, other_df
+        
+    except Exception as e:
+        print(f"❌ Error fetching analysis tables: {e}")
+        if conn:
+            conn.close()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 # Utility functions
 def safe_int(val):
@@ -817,6 +836,18 @@ def export_other_table(n_clicks, data):
     if n_clicks:
         df = pd.DataFrame(data)
         return dcc.send_data_frame(df.to_excel, "other_contacts_data.xlsx", index=False)
+
+@app.server.route('/health')
+def health_check():
+    conn = get_db_connection()
+    if conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM tax_summit_master_data")
+        count = cursor.fetchone()[0]
+        cursor.close()
+        conn.close()
+        return f"OK - {count} records in master table"
+    return "ERROR - Cannot connect to database", 500
 
 if __name__ == '__main__':
     port = int(os.getenv("PORT", 8050))
