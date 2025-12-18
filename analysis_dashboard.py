@@ -683,16 +683,17 @@ def create_tax_tab(tax_df):
     
     # Region analysis for Tax contacts
     tax_df_with_location = tax_df[tax_df['Location'].notna()].copy()
+    tax_df_with_location['Response_Clean'] = tax_df_with_location['Response_1'].astype(str).str.strip().str.lower()
     tax_df_with_location['Region'] = tax_df_with_location['Location'].apply(get_region)
     
     region_stats = tax_df_with_location.groupby('Region').agg({
-        'Phone_Number': 'count',  # Total count
-        'Response_1': lambda x: (x.fillna('').str.lower() == 'registered').sum()  # Total registered (case-insensitive)
+        'Phone_Number': 'count',
+        'Response_Clean': lambda x: (x == 'registered').sum()
     }).reset_index()
     region_stats.columns = ['Region', 'Total_Invited', 'Registered']
 
     # Calculate positive responses by region
-    positive_responses = tax_df_with_location[tax_df_with_location['Response'].str.lower().str.contains('positive', na=False)]
+    positive_responses = tax_df_with_location[tax_df_with_location['Response_Clean'] == 'positive']
     if len(positive_responses) > 0:
         positive_by_region = positive_responses.groupby('Region').size().reset_index(name='Positive_Responses')
         region_stats = region_stats.merge(positive_by_region, on='Region', how='left')
@@ -822,16 +823,17 @@ def create_cfo_tab(cfo_df):
     
     # Region analysis for CFO contacts
     cfo_df_with_location = cfo_df[cfo_df['Location_6'].notna()].copy()
+    cfo_df_with_location['Response_Clean'] = cfo_df_with_location['Response_7'].astype(str).str.strip().str.lower()
     cfo_df_with_location['Region'] = cfo_df_with_location['Location_6'].apply(get_region)
     
     region_stats = cfo_df_with_location.groupby('Region').agg({
         'Phone_Number_4': 'count',  # Total count
-        'Response_7': lambda x: (x.fillna('').str.lower() == 'registered').sum()  # Total registered (case-insensitive)
+        'Response_Clean': lambda x: (x == 'registered').sum()  # Total registered (case-insensitive)
     }).reset_index()
     region_stats.columns = ['Region', 'Total_Invited', 'Registered']
 
     # Calculate positive responses by region
-    positive_responses = cfo_df_with_location[cfo_df_with_location['Response'].str.lower().str.contains('positive', na=False)]
+    positive_responses = cfo_df_with_location[cfo_df_with_location['Response_Clean'] == 'positive']
     if len(positive_responses) > 0:
         positive_by_region = positive_responses.groupby('Region').size().reset_index(name='Positive_Responses')
         region_stats = region_stats.merge(positive_by_region, on='Region', how='left')
@@ -962,16 +964,17 @@ def create_other_tab(other_df):
     
     # Region analysis for Other contacts
     other_df_with_location = other_df[other_df['Location_12'].notna()].copy()
+    other_df_with_location['Response_Clean'] = other_df_with_location['Response_13'].astype(str).str.strip().str.lower()
     other_df_with_location['Region'] = other_df_with_location['Location_12'].apply(get_region)
     
     region_stats = other_df_with_location.groupby('Region').agg({
     'Phone_Number_10': 'count',  # Total count
-    'Response_13': lambda x: (x.fillna('').str.lower() == 'registered').sum()  # Total registered (case-insensitive)
+    'Response_Clean': lambda x: (x == 'registered').sum()  # Total registered (case-insensitive)
     }).reset_index()
     region_stats.columns = ['Region', 'Total_Invited', 'Registered']
 
     # Calculate positive responses by region
-    positive_responses = other_df_with_location[other_df_with_location['Response'].str.lower().str.contains('positive', na=False)]
+    positive_responses = other_df_with_location[other_df_with_location['Response_Clean'] == 'positive']
     if len(positive_responses) > 0:
         positive_by_region = positive_responses.groupby('Region').size().reset_index(name='Positive_Responses')
         region_stats = region_stats.merge(positive_by_region, on='Region', how='left')
