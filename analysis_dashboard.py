@@ -376,31 +376,42 @@ def load_data(n):
 
 @app.callback(
     Output('filtered-data', 'data'),
-    [Input('apply-filters', 'n_clicks'), Input('reset-filters', 'n_clicks')],
-    [State('master-data', 'data'), State('practice-head-filter', 'value'),
-     State('partner-filter', 'value'), State('sector-filter', 'value'),
-     State('location-filter', 'value'), State('response-filter', 'value')]
+    [Input('master-data', 'data'),
+     Input('apply-filters', 'n_clicks'), 
+     Input('reset-filters', 'n_clicks')],
+    [State('practice-head-filter', 'value'),
+     State('partner-filter', 'value'), 
+     State('sector-filter', 'value'),
+     State('location-filter', 'value'), 
+     State('response-filter', 'value')]
 )
-def filter_data(apply, reset, data, ph, partner, sector, loc, resp):
+def filter_data(data, apply, reset, ph, partner, sector, loc, resp):
     ctx = callback_context
+    
     if not data:
-        return {}
+        return []
     
     df = pd.DataFrame(data)
     
-    if ctx.triggered and 'reset' in ctx.triggered[0]['prop_id']:
+    # Check what triggered the callback
+    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else 'master-data'
+    
+    # On initial load (master-data) or reset button, return all data
+    if triggered_id == 'master-data' or triggered_id == 'reset-filters':
         return df.to_dict('records')
     
-    if ph:
-        df = df[df['Practice_Head'].isin(ph)]
-    if partner:
-        df = df[df['Partner'].isin(partner)]
-    if sector:
-        df = df[df['Sector'].isin(sector)]
-    if loc:
-        df = df[df['Location'].isin(loc)]
-    if resp:
-        df = df[df['Response'].isin(resp)]
+    # Apply filters only when "Apply" button is clicked
+    if triggered_id == 'apply-filters':
+        if ph:
+            df = df[df['Practice_Head'].isin(ph)]
+        if partner:
+            df = df[df['Partner'].isin(partner)]
+        if sector:
+            df = df[df['Sector'].isin(sector)]
+        if loc:
+            df = df[df['Location'].isin(loc)]
+        if resp:
+            df = df[df['Response'].isin(resp)]
     
     return df.to_dict('records')
 
@@ -667,8 +678,39 @@ def create_partner_tab(df, tax_df, cfo_df, other_df):
 
 def create_tax_tab(tax_df):
     total = len(tax_df)
-    registered = tax_df['numRegistrations'].apply(safe_int).sum()
+    registered = len(tax_df[tax_df['Response_1'].str.lower() == 'registered'])
     responses = tax_df.groupby('Response')['Response_Weight'].sum()
+    
+    # Region analysis for Tax contacts
+    tax_df_with_location = tax_df[tax_df['Location'].notna()].copy()
+    tax_df_with_location['Region'] = tax_df_with_location['Location'].apply(get_region)
+    
+    region_stats = tax_df_with_location.groupby('Region').agg({
+        'Phone_Number': 'count',  # Total count
+        'Response_1': lambda x: (x.fillna('').str.lower() == 'registered').sum()  # Total registered (case-insensitive)
+    }).reset_index()
+    region_stats.columns = ['Region', 'Total_Invited', 'Registered']
+
+    # Calculate positive responses by region
+    positive_responses = tax_df_with_location[tax_df_with_location['Response'].str.lower().str.contains('positive', na=False)]
+    if len(positive_responses) > 0:
+        positive_by_region = positive_responses.groupby('Region').size().reset_index(name='Positive_Responses')
+        region_stats = region_stats.merge(positive_by_region, on='Region', how='left')
+    else:
+        region_stats['Positive_Responses'] = 0
+
+    region_stats['Positive_Responses'] = region_stats['Positive_Responses'].fillna(0).astype(int)
+
+    # Calculate Total Confirmed = Registered + Positive
+    region_stats['Total_Confirmed'] = region_stats['Registered'] + region_stats['Positive_Responses']
+    region_stats['Unregistered'] = region_stats['Total_Invited'] - region_stats['Total_Confirmed']
+    region_stats['Registration_Rate'] = (region_stats['Total_Confirmed'] / region_stats['Total_Invited'] * 100).round(2)
+    
+    # Filter out regions with 0 invited (empty regions)
+    region_stats = region_stats[region_stats['Total_Confirmed'] > 0]
+    
+    # Sort by total for better visualization
+    region_stats = region_stats.sort_values('Total_Confirmed', ascending=False)
     
     return html.Div([
         html.H4("Tax Contacts Analysis", className="mb-4"),
@@ -679,7 +721,7 @@ def create_tax_tab(tax_df):
             dbc.Col(create_summary_card("Response Rate", 
                                        f"{round(tax_df['Response'].notna().sum()/total*100,2) if total>0 else 0}%", 
                                        "percentage", "info"), md=4),
-        ], className="mb-4"),
+        ], className="mb-4"),   
         
         dbc.Row([
             dbc.Col([
@@ -688,20 +730,125 @@ def create_tax_tab(tax_df):
                     dbc.CardBody(dcc.Graph(figure=px.pie(values=responses.values, names=responses.index, hole=0.4)))
                 ], className="shadow-sm")
             ], md=6),
+
+            # NEW: Region-wise Analysis - Grouped Bar Chart    
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader("Registrations by Response"),
-                    dbc.CardBody(dcc.Graph(figure=px.bar(responses.reset_index(), x='Response', y='Response_Weight')))
+                    dbc.CardHeader("Region-wise Tax Contact Total Confirmations (Bar Chart)"),
+                    dbc.CardBody(dcc.Graph(
+                        figure=go.Figure(data=[
+                            go.Bar(name='Total Confirmed', x=region_stats['Region'], y=region_stats['Total_Confirmed'], 
+                                    marker_color='#9467bd', text=region_stats['Total_Confirmed'], textposition='auto',
+                                    hovertemplate='<b>%{x}</b><br>Total Confirmed: %{y}<extra></extra>')
+                        ]).update_layout(
+                            barmode='group',
+                            xaxis_title="Region",
+                            yaxis_title="Count",
+                            hovermode='x unified',
+                            showlegend=True,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                    ))
                 ], className="shadow-sm")
             ], md=6),
         ], className="mb-4"),
+
+
+
+        #    This section is commented out as per the new requirement it shows Registrations by Response separately it seems redundant as of now but if needed in future can be uncommented    
+        #     dbc.Col([
+        #         dbc.Card([
+        #             dbc.CardHeader("Registrations by Response"),
+        #             dbc.CardBody(dcc.Graph(figure=px.bar(responses.reset_index(), x='Response', y='Response_Weight')))
+        #         ], className="shadow-sm")
+        #     ], md=6),
+        # ], className="mb-4"),       
         
+        # Alternative: Line Chart for comparison
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader("Region-wise Tax Contact Total Confirmations (Line Chart)"),
+                    dbc.CardBody(dcc.Graph(
+                        figure=go.Figure(data=[
+                            go.Scatter(name='Total Confirmed', x=region_stats['Region'], y=region_stats['Total_Confirmed'], 
+                                    mode='lines+markers+text', marker=dict(size=10, color='#9467bd'),
+                                    line=dict(width=3, color='#9467bd'),
+                                    text=region_stats['Total_Confirmed'], textposition='top center',
+                                    hovertemplate='<b>%{x}</b><br>Total Confirmed: %{y}<extra></extra>')
+                        ]).update_layout(
+                            xaxis_title="Region",
+                            yaxis_title="Count",
+                            hovermode='x unified',
+                            showlegend=True,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                    ))
+                ], className="shadow-sm")
+            ], md=12),
+        ], className="mb-4"),
+    
+        # Optional: Add a stacked percentage view
+        # Optional : Add a stacked percentage view which shows registration rate by region including unregistered and registered only for Tax contacts
+        # dbc.Row([
+        #     dbc.Col([
+        #         dbc.Card([
+        #             dbc.CardHeader("Registration Rate by Region"),
+        #             dbc.CardBody(dcc.Graph(
+        #                 figure=px.bar(region_stats, x='Region', y=['Registered', 'Unregistered'],
+        #                             barmode='stack',
+        #                             color_discrete_map={'Registered': '#2ca02c', 'Unregistered': '#d62728'},
+        #                             labels={'value': 'Count', 'variable': 'Status'})
+        #                 .update_traces(
+        #                     text=region_stats[['Registered', 'Unregistered']].values.tolist(),
+        #                     textposition='inside'
+        #                 )
+        #                 .update_layout(
+        #                     xaxis_title="Region",
+        #                     yaxis_title="Count",
+        #                     showlegend=True
+        #                 )
+        #             ))
+        #         ], className="shadow-sm")
+        #     ], md=12),
+        # ])
     ])
+    
 
 def create_cfo_tab(cfo_df):
     total = len(cfo_df)
-    registered = cfo_df['numRegistrations'].apply(safe_int).sum()
+    registered = len(cfo_df[cfo_df['Response_7'].str.lower() == 'registered'])
     responses = cfo_df.groupby('Response')['Response_Weight'].sum()
+    
+    # Region analysis for CFO contacts
+    cfo_df_with_location = cfo_df[cfo_df['Location_6'].notna()].copy()
+    cfo_df_with_location['Region'] = cfo_df_with_location['Location_6'].apply(get_region)
+    
+    region_stats = cfo_df_with_location.groupby('Region').agg({
+        'Phone_Number_4': 'count',  # Total count
+        'Response_7': lambda x: (x.fillna('').str.lower() == 'registered').sum()  # Total registered (case-insensitive)
+    }).reset_index()
+    region_stats.columns = ['Region', 'Total_Invited', 'Registered']
+
+    # Calculate positive responses by region
+    positive_responses = cfo_df_with_location[cfo_df_with_location['Response'].str.lower().str.contains('positive', na=False)]
+    if len(positive_responses) > 0:
+        positive_by_region = positive_responses.groupby('Region').size().reset_index(name='Positive_Responses')
+        region_stats = region_stats.merge(positive_by_region, on='Region', how='left')
+    else:
+        region_stats['Positive_Responses'] = 0
+
+    region_stats['Positive_Responses'] = region_stats['Positive_Responses'].fillna(0).astype(int)
+
+    # Calculate Total Confirmed = Registered + Positive
+    region_stats['Total_Confirmed'] = region_stats['Registered'] + region_stats['Positive_Responses']
+    region_stats['Unregistered'] = region_stats['Total_Invited'] - region_stats['Total_Confirmed']
+    region_stats['Registration_Rate'] = (region_stats['Total_Confirmed'] / region_stats['Total_Invited'] * 100).round(2)
+
+    # Filter out regions with 0 invited (empty regions)
+    region_stats = region_stats[region_stats['Total_Confirmed'] > 0]
+
+    region_stats = region_stats.sort_values('Total_Confirmed', ascending=False)
     
     return html.Div([
         html.H4("CFO Contacts Analysis", className="mb-4"),
@@ -721,21 +868,127 @@ def create_cfo_tab(cfo_df):
                     dbc.CardBody(dcc.Graph(figure=px.pie(values=responses.values, names=responses.index, hole=0.4)))
                 ], className="shadow-sm")
             ], md=6),
+
+            # NEW: Region-wise Analysis for CFO - Grouped Bar Chart
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader("CFO by Sector"),
-                    dbc.CardBody(dcc.Graph(figure=px.bar(cfo_df.groupby('Sector').size().reset_index(name='Count'), 
-                                                        x='Sector', y='Count')))
+                    dbc.CardHeader("Region-wise CFO Contact Total Confirmations (Bar Chart)"),
+                    dbc.CardBody(dcc.Graph(
+                        figure=go.Figure(data=[
+                            go.Bar(name='Total Confirmed', x=region_stats['Region'], y=region_stats['Total_Confirmed'], 
+                                    marker_color='#9467bd', text=region_stats['Total_Confirmed'], textposition='auto',
+                                    hovertemplate='<b>%{x}</b><br>Total Confirmed: %{y}<extra></extra>')
+                        ]).update_layout(
+                            barmode='group',
+                            xaxis_title="Region",
+                            yaxis_title="Count",
+                            hovermode='x unified',
+                            showlegend=True,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                    ))
                 ], className="shadow-sm")
             ], md=6),
         ], className="mb-4"),
+
+            # This section is commented out as per the new requirement it shows Count of CFO by sector  separately it seems redundant as of now but if needed in future can be uncommented
+            # dbc.Col([
+            #     dbc.Card([
+            #         dbc.CardHeader("CFO by Sector"),
+            #         dbc.CardBody(dcc.Graph(figure=px.bar(cfo_df.groupby('Sector').size().reset_index(name='Count'), 
+            #                                             x='Sector', y='Count')))
+            #     ], className="shadow-sm")
+            # ], md=6),
+        # ], className="mb-4"),
         
+                     
+        
+        # Alternative: Line Chart for comparison
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader("Region-wise CFO Contact Total Confirmations (Line Chart)"),
+                    dbc.CardBody(dcc.Graph(
+                        figure=go.Figure(data=[
+                            go.Scatter(name='Total Confirmed', x=region_stats['Region'], y=region_stats['Total_Confirmed'], 
+                                    mode='lines+markers+text', marker=dict(size=10, color='#9467bd'),
+                                    line=dict(width=3, color='#9467bd'),
+                                    text=region_stats['Total_Confirmed'], textposition='top center',
+                                    hovertemplate='<b>%{x}</b><br>Total Confirmed: %{y}<extra></extra>')
+                        ]).update_layout(
+                            xaxis_title="Region",
+                            yaxis_title="Count",
+                            hovermode='x unified',
+                            showlegend=True,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                    ))
+                ], className="shadow-sm")
+            ], md=12),
+        ], className="mb-4"),
+    
+
+
+        # Optionsl: Add a stacked percentage view
+        #  Optional: Add a stacked percentage view which shows registration rate by region including unregistered and registered only for CFO contacts
+        #  dbc.Row([
+        #     dbc.Col([
+        #         dbc.Card([
+        #             dbc.CardHeader("Registration Rate by Region"),
+        #             dbc.CardBody(dcc.Graph(
+        #                 figure=px.bar(region_stats, x='Region', y=['Registered', 'Unregistered'],
+        #                             barmode='stack',
+        #                             color_discrete_map={'Registered': '#2ca02c', 'Unregistered': '#d62728'},
+        #                             labels={'value': 'Count', 'variable': 'Status'})
+        #                 .update_traces(
+        #                     text=region_stats[['Registered', 'Unregistered']].values.tolist(),
+        #                     textposition='inside'
+        #                 )
+        #                 .update_layout(
+        #                     xaxis_title="Region",
+        #                     yaxis_title="Count",
+        #                     showlegend=True
+        #                 )
+        #             ))
+        #         ], className="shadow-sm")
+        #     ], md=12),
+        # ])
     ])
 
 def create_other_tab(other_df):
     total = len(other_df)
-    registered = other_df['numRegistrations'].apply(safe_int).sum()
+    registered = len(other_df[other_df['Response_13'].str.lower() == 'registered'])
     responses = other_df.groupby('Response')['Response_Weight'].sum()
+    
+    # Region analysis for Other contacts
+    other_df_with_location = other_df[other_df['Location_12'].notna()].copy()
+    other_df_with_location['Region'] = other_df_with_location['Location_12'].apply(get_region)
+    
+    region_stats = other_df_with_location.groupby('Region').agg({
+    'Phone_Number_10': 'count',  # Total count
+    'Response_13': lambda x: (x.fillna('').str.lower() == 'registered').sum()  # Total registered (case-insensitive)
+    }).reset_index()
+    region_stats.columns = ['Region', 'Total_Invited', 'Registered']
+
+    # Calculate positive responses by region
+    positive_responses = other_df_with_location[other_df_with_location['Response'].str.lower().str.contains('positive', na=False)]
+    if len(positive_responses) > 0:
+        positive_by_region = positive_responses.groupby('Region').size().reset_index(name='Positive_Responses')
+        region_stats = region_stats.merge(positive_by_region, on='Region', how='left')
+    else:
+        region_stats['Positive_Responses'] = 0
+
+    region_stats['Positive_Responses'] = region_stats['Positive_Responses'].fillna(0).astype(int)
+
+    # Calculate Total Confirmed = Registered + Positive
+    region_stats['Total_Confirmed'] = region_stats['Registered'] + region_stats['Positive_Responses']
+    region_stats['Unregistered'] = region_stats['Total_Invited'] - region_stats['Total_Confirmed']
+    region_stats['Registration_Rate'] = (region_stats['Total_Confirmed'] / region_stats['Total_Invited'] * 100).round(2)
+
+    # Filter out regions with 0 invited (empty regions)
+    region_stats = region_stats[region_stats['Total_Confirmed'] > 0]
+
+    region_stats = region_stats.sort_values('Total_Confirmed', ascending=False)
     
     return html.Div([
         html.H4("Other Contacts Analysis", className="mb-4"),
@@ -754,9 +1007,79 @@ def create_other_tab(other_df):
                     dbc.CardHeader("Response Status Distribution"),
                     dbc.CardBody(dcc.Graph(figure=px.pie(values=responses.values, names=responses.index, hole=0.4)))
                 ], className="shadow-sm")
+            ], md=6),
+        
+        # NEW: Region-wise Analysis for Other contacts - Grouped Bar Chart
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader("Region-wise Other Contact Total Confirmations (Bar Chart)"),
+                    dbc.CardBody(dcc.Graph(
+                        figure=go.Figure(data=[
+                            go.Bar(name='Total Confirmed', x=region_stats['Region'], y=region_stats['Total_Confirmed'], 
+                                marker_color='#9467bd', text=region_stats['Total_Confirmed'], textposition='auto',
+                                hovertemplate='<b>%{x}</b><br>Total Confirmed: %{y}<extra></extra>')
+                        ]).update_layout(
+                            barmode='group',
+                            xaxis_title="Region",
+                            yaxis_title="Count",
+                            hovermode='x unified',
+                            showlegend=True,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                    ))
+                ], className="shadow-sm")
+            ], md=6),
+        ], className="mb-4"),
+        
+        # Alternative: Line Chart for comparison
+        dbc.Row([
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardHeader("Region-wise Other Contact Total Confirmations (Line Chart)"),
+                    dbc.CardBody(dcc.Graph(
+                        figure=go.Figure(data=[
+                            go.Scatter(name='Total Confirmed', x=region_stats['Region'], y=region_stats['Total_Confirmed'], 
+                                    mode='lines+markers+text', marker=dict(size=10, color='#9467bd'),
+                                    line=dict(width=3, color='#9467bd'),
+                                    text=region_stats['Total_Confirmed'], textposition='top center',
+                                    hovertemplate='<b>%{x}</b><br>Total Confirmed: %{y}<extra></extra>')
+                        ]).update_layout(
+                            xaxis_title="Region",
+                            yaxis_title="Count",
+                            hovermode='x unified',
+                            showlegend=True,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        )
+                    ))
+                ], className="shadow-sm")
             ], md=12),
         ], className="mb-4"),
 
+
+        # # Optionsl: Add a stacked percentage view
+        # Optional: Add a stacked percentage view which shows registration rate by region including unregistered and registered only for Other contacts
+        # dbc.Row([
+        #     dbc.Col([
+        #         dbc.Card([
+        #             dbc.CardHeader("Registration Rate by Region"),
+        #             dbc.CardBody(dcc.Graph(
+        #                 figure=px.bar(region_stats, x='Region', y=['Registered', 'Unregistered'],
+        #                             barmode='stack',
+        #                             color_discrete_map={'Registered': '#2ca02c', 'Unregistered': '#d62728'},
+        #                             labels={'value': 'Count', 'variable': 'Status'})
+        #                 .update_traces(
+        #                     text=region_stats[['Registered', 'Unregistered']].values.tolist(),
+        #                     textposition='inside'
+        #                 )
+        #                 .update_layout(
+        #                     xaxis_title="Region",
+        #                     yaxis_title="Count",
+        #                     showlegend=True
+        #                 )
+        #             ))
+        #         ], className="shadow-sm")
+        #     ], md=12),
+        # ])
     ])
 
 def create_metrics_tab(df):
