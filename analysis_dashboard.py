@@ -1156,7 +1156,9 @@ def create_metrics_tab(df):
     ])
 
 
-''' This section is commented out as data table exports are currently not in use.
+
+# This section is commented out as data table exports are not needed as of now uncomment to use it
+'''  .
 # Export callbacks
 @app.callback(
     Output("ph-table-download", "data"),
