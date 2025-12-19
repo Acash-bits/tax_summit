@@ -22,11 +22,156 @@ def connect_to_mysql():
         print(f"✗ Error connecting to MySQL: {e}")
         return None
 
+def check_sync_status(connection):
+    """Check current sync status and identify discrepancies"""
+    cursor = connection.cursor(dictionary=True)
+    
+    print("\n[Checking Current Sync Status]")
+    print("-" * 70)
+    
+    try:
+        # Tax contacts
+        cursor.execute("SELECT COUNT(*) as c FROM tax_summit_master_data WHERE Phone_Number IS NOT NULL AND Phone_Number != ''")
+        master_tax = cursor.fetchone()['c']
+        
+        cursor.execute("SELECT COUNT(*) as c FROM Tax_Persons_Analysis")
+        analysis_tax = cursor.fetchone()['c']
+        
+        # CFO contacts
+        cursor.execute("SELECT COUNT(*) as c FROM tax_summit_master_data WHERE Phone_Number_4 IS NOT NULL AND Phone_Number_4 != ''")
+        master_cfo = cursor.fetchone()['c']
+        
+        cursor.execute("SELECT COUNT(*) as c FROM CFO_Persons_Analysis")
+        analysis_cfo = cursor.fetchone()['c']
+        
+        # Other contacts
+        cursor.execute("SELECT COUNT(*) as c FROM tax_summit_master_data WHERE Phone_Number_10 IS NOT NULL AND Phone_Number_10 != ''")
+        master_other = cursor.fetchone()['c']
+        
+        cursor.execute("SELECT COUNT(*) as c FROM Other_Persons_Analysis")
+        analysis_other = cursor.fetchone()['c']
+        
+        print(f"\n  Master → Analysis (Current State):")
+        print(f"    Tax:   {master_tax} → {analysis_tax}   ({master_tax - analysis_tax} missing)")
+        print(f"    CFO:   {master_cfo} → {analysis_cfo}   ({master_cfo - analysis_cfo} missing)")
+        print(f"    Other: {master_other} → {analysis_other}   ({master_other - analysis_other} missing)")
+        
+        total_missing = (master_tax - analysis_tax) + (master_cfo - analysis_cfo) + (master_other - analysis_other)
+        
+        if total_missing > 0:
+            print(f"\n  ⚠️  Total {total_missing} records need to be synced")
+            return False
+        else:
+            print(f"\n  ✅ All tables are in sync!")
+            return True
+            
+    except Error as e:
+        print(f"  ❌ Error checking sync: {e}")
+        return False
+    finally:
+        cursor.close()
+
+def perform_full_resync(connection):
+    """Perform complete resync of all analysis tables from master"""
+    cursor = connection.cursor()
+    
+    print("\n[Performing Full Resync]")
+    print("-" * 70)
+    print("\n  This will:")
+    print("    1. Clear all existing analysis data")
+    print("    2. Repopulate from master table")
+    print("    3. Catch ALL pending changes")
+    print()
+    
+    try:
+        # Step 1: Clear analysis tables
+        print("  [1/4] Clearing analysis tables...")
+        
+        cursor.execute("DELETE FROM Tax_Persons_Analysis")
+        tax_deleted = cursor.rowcount
+        print(f"        Tax_Persons_Analysis: {tax_deleted} rows deleted")
+        
+        cursor.execute("DELETE FROM CFO_Persons_Analysis")
+        cfo_deleted = cursor.rowcount
+        print(f"        CFO_Persons_Analysis: {cfo_deleted} rows deleted")
+        
+        cursor.execute("DELETE FROM Other_Persons_Analysis")
+        other_deleted = cursor.rowcount
+        print(f"        Other_Persons_Analysis: {other_deleted} rows deleted")
+        
+        connection.commit()
+        
+        # Step 2: Repopulate Tax_Persons_Analysis
+        print("\n  [2/4] Repopulating Tax_Persons_Analysis...")
+        cursor.execute("""
+            INSERT INTO Tax_Persons_Analysis 
+                (Client_Name, Practice_Head, Partner, Invite_Status, numInvitees, Response, 
+                 Sector, numRegistrations, Tax_Contact, Designation, Email_ID, Phone_Number, 
+                 Location, Response_1)
+            SELECT 
+                Client_Name, Practice_Head, Partner, Invite_Status, numInvitees, Response, 
+                Sector, numRegistrations, Tax_Contact, Designation, Email_ID, Phone_Number, 
+                Location, Response_1
+            FROM tax_summit_master_data
+            WHERE Phone_Number IS NOT NULL AND Phone_Number != ''
+        """)
+        tax_inserted = cursor.rowcount
+        print(f"        ✓ {tax_inserted} records inserted")
+        
+        # Step 3: Repopulate CFO_Persons_Analysis
+        print("\n  [3/4] Repopulating CFO_Persons_Analysis...")
+        cursor.execute("""
+            INSERT INTO CFO_Persons_Analysis 
+                (Company_Name, Practice_Head, Partner, Invite_Status, numInvitees, Response, 
+                 Sector, numRegistrations, CFO_Name, Designation_2, Email_ID_3, Phone_Number_4, 
+                 Location_6, Response_7)
+            SELECT 
+                Client_Name, Practice_Head, Partner, Invite_Status, numInvitees, Response, 
+                Sector, numRegistrations, CFO_Name, Designation_2, Email_ID_3, Phone_Number_4, 
+                Location_6, Response_7
+            FROM tax_summit_master_data
+            WHERE Phone_Number_4 IS NOT NULL AND Phone_Number_4 != ''
+        """)
+        cfo_inserted = cursor.rowcount
+        print(f"        ✓ {cfo_inserted} records inserted")
+        
+        # Step 4: Repopulate Other_Persons_Analysis
+        print("\n  [4/4] Repopulating Other_Persons_Analysis...")
+        cursor.execute("""
+            INSERT INTO Other_Persons_Analysis 
+                (Company_Name, Practice_Head, Partner, Invite_Status, numInvitees, Response, 
+                 Sector, numRegistrations, Others, Designation_8, Email_ID_9, Phone_Number_10, 
+                 Location_12, Response_13)
+            SELECT 
+                Client_Name, Practice_Head, Partner, Invite_Status, numInvitees, Response, 
+                Sector, numRegistrations, Others, Designation_8, Email_ID_9, Phone_Number_10, 
+                Location_12, Response_13
+            FROM tax_summit_master_data
+            WHERE Phone_Number_10 IS NOT NULL AND Phone_Number_10 != ''
+        """)
+        other_inserted = cursor.rowcount
+        print(f"        ✓ {other_inserted} records inserted")
+        
+        connection.commit()
+        
+        print(f"\n  ✅ Resync complete!")
+        print(f"     Total records synced: {tax_inserted + cfo_inserted + other_inserted}")
+        
+        return True
+        
+    except Error as e:
+        print(f"\n  ❌ Resync failed: {e}")
+        connection.rollback()
+        return False
+    finally:
+        cursor.close()
+
 def drop_existing_triggers(connection):
     """Drop all existing analysis triggers"""
     cursor = connection.cursor()
     
-    print("\n[Step 1] Dropping old triggers...")
+    print("\n[Dropping Old Triggers]")
+    print("-" * 70)
     
     triggers = [
         "after_master_insert_analysis",
@@ -48,7 +193,8 @@ def create_enhanced_triggers(connection):
     """Create enhanced triggers with proper update logic"""
     cursor = connection.cursor()
     
-    print("\n[Step 2] Creating enhanced triggers...")
+    print("\n[Creating Enhanced Triggers]")
+    print("-" * 70)
     
     # =====================================================================
     # TRIGGER 1: INSERT - Populate analysis tables on new master record
@@ -153,16 +299,12 @@ def create_enhanced_triggers(connection):
     FOR EACH ROW
     BEGIN
         -- Update Tax_Persons_Analysis
-        -- Updates ALL fields when ANY field changes in master
         IF NEW.Phone_Number IS NOT NULL AND NEW.Phone_Number != '' THEN
-            -- If phone number changed, update old record and insert/update new
             IF OLD.Phone_Number != NEW.Phone_Number THEN
-                -- Delete old phone number entry if it exists
                 DELETE FROM Tax_Persons_Analysis 
                 WHERE Phone_Number = OLD.Phone_Number 
                   AND Client_Name = OLD.Client_Name;
                 
-                -- Insert new entry
                 INSERT INTO Tax_Persons_Analysis 
                     (Client_Name, Practice_Head, Partner, Invite_Status, numInvitees, 
                      Response, Sector, numRegistrations, Tax_Contact, Designation, 
@@ -188,7 +330,6 @@ def create_enhanced_triggers(connection):
                     Response_1 = NEW.Response_1,
                     Last_Updated = CURRENT_TIMESTAMP;
             ELSE
-                -- Phone number same, just update all other fields
                 UPDATE Tax_Persons_Analysis 
                 SET 
                     Client_Name = NEW.Client_Name,
@@ -208,7 +349,6 @@ def create_enhanced_triggers(connection):
                 WHERE Phone_Number = NEW.Phone_Number;
             END IF;
         ELSE
-            -- Phone number is now NULL/empty, delete from analysis
             IF OLD.Phone_Number IS NOT NULL AND OLD.Phone_Number != '' THEN
                 DELETE FROM Tax_Persons_Analysis 
                 WHERE Phone_Number = OLD.Phone_Number 
@@ -216,7 +356,7 @@ def create_enhanced_triggers(connection):
             END IF;
         END IF;
         
-        -- Update CFO_Persons_Analysis (same logic)
+        -- Update CFO_Persons_Analysis
         IF NEW.Phone_Number_4 IS NOT NULL AND NEW.Phone_Number_4 != '' THEN
             IF OLD.Phone_Number_4 != NEW.Phone_Number_4 THEN
                 DELETE FROM CFO_Persons_Analysis 
@@ -274,7 +414,7 @@ def create_enhanced_triggers(connection):
             END IF;
         END IF;
         
-        -- Update Other_Persons_Analysis (same logic)
+        -- Update Other_Persons_Analysis
         IF NEW.Phone_Number_10 IS NOT NULL AND NEW.Phone_Number_10 != '' THEN
             IF OLD.Phone_Number_10 != NEW.Phone_Number_10 THEN
                 DELETE FROM Other_Persons_Analysis 
@@ -342,21 +482,18 @@ def create_enhanced_triggers(connection):
     AFTER DELETE ON tax_summit_master_data
     FOR EACH ROW
     BEGIN
-        -- Delete from Tax_Persons_Analysis
         IF OLD.Phone_Number IS NOT NULL AND OLD.Phone_Number != '' THEN
             DELETE FROM Tax_Persons_Analysis 
             WHERE Phone_Number = OLD.Phone_Number 
               AND Client_Name = OLD.Client_Name;
         END IF;
         
-        -- Delete from CFO_Persons_Analysis
         IF OLD.Phone_Number_4 IS NOT NULL AND OLD.Phone_Number_4 != '' THEN
             DELETE FROM CFO_Persons_Analysis 
             WHERE Phone_Number_4 = OLD.Phone_Number_4 
               AND Company_Name = OLD.Client_Name;
         END IF;
         
-        -- Delete from Other_Persons_Analysis
         IF OLD.Phone_Number_10 IS NOT NULL AND OLD.Phone_Number_10 != '' THEN
             DELETE FROM Other_Persons_Analysis 
             WHERE Phone_Number_10 = OLD.Phone_Number_10 
@@ -365,7 +502,6 @@ def create_enhanced_triggers(connection):
     END
     """
     
-    # Execute trigger creation
     try:
         cursor.execute(insert_trigger)
         print("  ✓ Created: after_master_insert_analysis")
@@ -377,25 +513,23 @@ def create_enhanced_triggers(connection):
         print("  ✓ Created: after_master_delete_analysis")
         
         connection.commit()
-        print("\n✅ All triggers created successfully!")
+        return True
         
     except Error as e:
-        print(f"\n❌ Error creating triggers: {e}")
+        print(f"\n  ❌ Error creating triggers: {e}")
         connection.rollback()
         return False
     finally:
         cursor.close()
-    
-    return True
 
 def test_trigger_functionality(connection):
     """Test the triggers with a sample update"""
     cursor = connection.cursor(dictionary=True)
     
-    print("\n[Step 3] Testing trigger functionality...")
+    print("\n[Testing Trigger Functionality]")
+    print("-" * 70)
     
     try:
-        # Get a sample record
         cursor.execute("""
             SELECT Client_Name, Phone_Number, Practice_Head 
             FROM tax_summit_master_data 
@@ -412,10 +546,9 @@ def test_trigger_functionality(connection):
         phone = sample['Phone_Number']
         old_ph = sample['Practice_Head']
         
-        print(f"  Testing with: {client} ({phone})")
+        print(f"\n  Testing with: {client} ({phone})")
         print(f"  Current Practice_Head: {old_ph}")
         
-        # Update Practice_Head
         test_value = f"TEST_{old_ph}"
         cursor.execute("""
             UPDATE tax_summit_master_data 
@@ -423,7 +556,6 @@ def test_trigger_functionality(connection):
             WHERE Client_Name = %s
         """, (test_value, client))
         
-        # Check if it updated in analysis table
         cursor.execute("""
             SELECT Practice_Head 
             FROM Tax_Persons_Analysis 
@@ -436,11 +568,7 @@ def test_trigger_functionality(connection):
             print(f"     New Practice_Head in analysis: {result['Practice_Head']}")
         else:
             print(f"  ❌ TEST FAILED! Analysis table not updated")
-            if result:
-                print(f"     Expected: {test_value}")
-                print(f"     Got: {result['Practice_Head']}")
         
-        # Restore original value
         cursor.execute("""
             UPDATE tax_summit_master_data 
             SET Practice_Head = %s 
@@ -448,7 +576,7 @@ def test_trigger_functionality(connection):
         """, (old_ph, client))
         
         connection.commit()
-        print(f"  ✓ Test completed, original value restored")
+        print(f"  ✓ Original value restored")
         
     except Error as e:
         print(f"  ❌ Test error: {e}")
@@ -456,51 +584,16 @@ def test_trigger_functionality(connection):
     finally:
         cursor.close()
 
-def verify_sync_status(connection):
-    """Verify current sync status"""
-    cursor = connection.cursor(dictionary=True)
-    
-    print("\n[Step 4] Verifying sync status...")
-    
-    try:
-        # Check counts
-        cursor.execute("SELECT COUNT(*) as c FROM tax_summit_master_data WHERE Phone_Number IS NOT NULL AND Phone_Number != ''")
-        master_tax = cursor.fetchone()['c']
-        
-        cursor.execute("SELECT COUNT(*) as c FROM Tax_Persons_Analysis")
-        analysis_tax = cursor.fetchone()['c']
-        
-        cursor.execute("SELECT COUNT(*) as c FROM tax_summit_master_data WHERE Phone_Number_4 IS NOT NULL AND Phone_Number_4 != ''")
-        master_cfo = cursor.fetchone()['c']
-        
-        cursor.execute("SELECT COUNT(*) as c FROM CFO_Persons_Analysis")
-        analysis_cfo = cursor.fetchone()['c']
-        
-        cursor.execute("SELECT COUNT(*) as c FROM tax_summit_master_data WHERE Phone_Number_10 IS NOT NULL AND Phone_Number_10 != ''")
-        master_other = cursor.fetchone()['c']
-        
-        cursor.execute("SELECT COUNT(*) as c FROM Other_Persons_Analysis")
-        analysis_other = cursor.fetchone()['c']
-        
-        print("\n  Master → Analysis:")
-        print(f"    Tax:   {master_tax} → {analysis_tax}   {'✅' if master_tax == analysis_tax else '⚠️'}")
-        print(f"    CFO:   {master_cfo} → {analysis_cfo}   {'✅' if master_cfo == analysis_cfo else '⚠️'}")
-        print(f"    Other: {master_other} → {analysis_other}   {'✅' if master_other == analysis_other else '⚠️'}")
-        
-    except Error as e:
-        print(f"  ❌ Verification error: {e}")
-    finally:
-        cursor.close()
-
 def main():
     print("\n" + "="*70)
-    print("  🔧 ENHANCED ANALYSIS TABLE TRIGGERS")
+    print("  🔧 ENHANCED ANALYSIS TABLE TRIGGERS + FULL RESYNC")
     print("="*70)
-    print("\n  This will create triggers that sync ALL changes from master")
-    print("  to analysis tables, including:")
-    print("    • Any column updates (Practice_Head, Partner, Response, etc.)")
-    print("    • Phone number changes (handles old/new properly)")
-    print("    • Deletions (cascading to analysis tables)")
+    print("\n  This script will:")
+    print("    1. Check current sync status")
+    print("    2. Perform FULL RESYNC (sync all pending changes)")
+    print("    3. Drop old triggers")
+    print("    4. Create new enhanced triggers")
+    print("    5. Test trigger functionality")
     print("="*70 + "\n")
     
     connection = connect_to_mysql()
@@ -508,33 +601,47 @@ def main():
         return
     
     try:
-        # Drop old triggers
+        # Step 1: Check current status
+        is_synced = check_sync_status(connection)
+        
+        # Step 2: Perform full resync if needed
+        if not is_synced:
+            print("\n⚠️  Tables are out of sync. Performing full resync...")
+            if not perform_full_resync(connection):
+                print("\n❌ Resync failed. Cannot continue.")
+                return
+            
+            # Verify resync worked
+            print("\n[Verifying Resync]")
+            print("-" * 70)
+            check_sync_status(connection)
+        
+        # Step 3: Drop old triggers
         drop_existing_triggers(connection)
         
-        # Create new enhanced triggers
+        # Step 4: Create new triggers
         if not create_enhanced_triggers(connection):
             print("\n❌ Failed to create triggers")
             return
         
-        # Test functionality
+        # Step 5: Test triggers
         test_trigger_functionality(connection)
         
-        # Verify sync
-        verify_sync_status(connection)
-        
+        # Final summary
         print("\n" + "="*70)
-        print("  ✅ SETUP COMPLETE!")
+        print("  ✅ COMPLETE SETUP FINISHED!")
         print("="*70)
-        print("\n  Your triggers now handle:")
-        print("    ✓ ALL column updates (not just phone)")
-        print("    ✓ Phone number changes (properly deletes old, inserts new)")
-        print("    ✓ NULL phone numbers (removes from analysis)")
-        print("    ✓ Row deletions (cascading delete)")
-        print("    ✓ Timestamps (Last_Updated field)")
-        print("\n  Try it out:")
-        print("    1. Update any field in tax_summit_master_data")
-        print("    2. Check the corresponding analysis table")
-        print("    3. The change will be reflected automatically!")
+        print("\n  ✓ All pending changes have been synced")
+        print("  ✓ Enhanced triggers created")
+        print("  ✓ Trigger functionality tested")
+        print("\n  From now on, ALL updates to master table will")
+        print("  automatically sync to analysis tables!")
+        print("\n  This includes updates to:")
+        print("    • Practice_Head, Partner, Sector, Location")
+        print("    • Response, Response_1, Response_7, Response_13")
+        print("    • numInvitees, numRegistrations")
+        print("    • Email addresses, Phone numbers")
+        print("    • ANY other field in master table")
         print("="*70 + "\n")
         
     finally:
