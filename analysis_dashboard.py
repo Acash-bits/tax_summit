@@ -473,6 +473,15 @@ def update_filters(apply_clicks, reset_clicks, ph, partner, sector, loc, resp):
         'resp': resp or []
     }
 
+@app.callback(
+    Output('tab-content', 'children'),
+    [Input('tabs', 'active_tab'), 
+     Input('filtered-data', 'data'),
+     Input('master-data', 'data'),
+     Input('tax-data', 'data'), 
+     Input('cfo-data', 'data'), 
+     Input('other-data', 'data')]
+)
 
 def render_content(tab, filtered, master, tax, cfo, other):
     if not filtered:
