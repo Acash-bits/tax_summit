@@ -251,8 +251,8 @@ def create_filter_panel():
                 ], md=2),
                 dbc.Col([
                     html.Div([
-                        html.Span("Auto-refresh: 30s", className="badge bg-success mt-4"),
-                        dcc.Interval(id='interval-component', interval=30*1000, n_intervals=0)
+                        html.Span("Auto-refresh: 1 minute", className="badge bg-success mt-4"),
+                        dcc.Interval(id='interval-component', interval=60*1000, n_intervals=0)
                     ])
                 ], md=2, className="text-end"),
             ])
