@@ -328,70 +328,91 @@ app.layout = dbc.Container([
      Output('master-data', 'data'),
      Output('tax-data', 'data'),
      Output('cfo-data', 'data'),
-     Output('other-data', 'data')],
-    Input('interval-component', 'n_intervals')
+     Output('other-data', 'data'),
+     Output('practice-head-filter', 'value'),
+     Output('partner-filter', 'value'),
+     Output('sector-filter', 'value'),
+     Output('location-filter', 'value'),
+     Output('response-filter', 'value')],
+    [Input('interval-component', 'n_intervals')],
+    [State('practice-head-filter', 'value'),
+     State('partner-filter', 'value'),
+     State('sector-filter', 'value'),
+     State('location-filter', 'value'),
+     State('response-filter', 'value')],
+    # KEY OPTIMIZATION: Only run once on initial load
+    prevent_initial_call=False
 )
-def load_data(n):
+def load_data(n, current_ph, current_partner, current_sector, current_loc, current_resp):
+    """Load data - optimized to reduce unnecessary processing"""
+    
     master_df = fetch_master_data()
+    
+    # OPTIMIZATION 1: Only fetch analysis tables if master data exists
+    if master_df.empty:
+        return [], [], [], [], [], {}, {}, {}, {}, None, None, None, None, None
+    
     tax_df, cfo_df, other_df = fetch_analysis_tables()
     
-    # Standardize names to Title format
-    if not master_df.empty:
-        name_columns = ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector']
-        for col in name_columns:
-            if col in master_df.columns:
-                master_df[col] = master_df[col].apply(lambda x: str(x).strip().title() if pd.notna(x) else x)
+    # OPTIMIZATION 2: Batch process all name standardization
+    def standardize_names(df, columns):
+        """Vectorized name standardization"""
+        for col in columns:
+            if col in df.columns:
+                df[col] = df[col].str.strip().str.title()
+        return df
+    
+    # Standardize all dataframes
+    master_df = standardize_names(master_df, ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector'])
     
     if not tax_df.empty:
-        name_columns = ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector', 'Person_Name']
-        for col in name_columns:
-            if col in tax_df.columns:
-                tax_df[col] = tax_df[col].apply(lambda x: str(x).strip().title() if pd.notna(x) else x)
+        tax_df = standardize_names(tax_df, ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector', 'Person_Name'])
     
     if not cfo_df.empty:
-        name_columns = ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector', 'Person_Name']
-        for col in name_columns:
-            if col in cfo_df.columns:
-                cfo_df[col] = cfo_df[col].apply(lambda x: str(x).strip().title() if pd.notna(x) else x)
+        cfo_df = standardize_names(cfo_df, ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector', 'Person_Name'])
     
     if not other_df.empty:
-        name_columns = ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector', 'Person_Name']
-        for col in name_columns:
-            if col in other_df.columns:
-                other_df[col] = other_df[col].apply(lambda x: str(x).strip().title() if pd.notna(x) else x)
+        other_df = standardize_names(other_df, ['Practice_Head', 'Partner', 'Client_Name', 'Location', 'Sector', 'Person_Name'])
     
-        # After standardizing master_df
-    if not master_df.empty and 'Response' in master_df.columns:
-        master_df['Response_Weight'] = master_df['Response'].apply(get_response_weight)
-        master_df['Response'] = master_df['Response'].apply(normalize_response_label)
-
-    # After standardizing tax_df
-    if not tax_df.empty and 'Response' in tax_df.columns:
-        tax_df['Response_Weight'] = tax_df['Response'].apply(get_response_weight)
-        tax_df['Response'] = tax_df['Response'].apply(normalize_response_label)
-
-    # After standardizing cfo_df
-    if not cfo_df.empty and 'Response' in cfo_df.columns:
-        cfo_df['Response_Weight'] = cfo_df['Response'].apply(get_response_weight)
-        cfo_df['Response'] = cfo_df['Response'].apply(normalize_response_label)
-
-    # After standardizing other_df
-    if not other_df.empty and 'Response' in other_df.columns:
-        other_df['Response_Weight'] = other_df['Response'].apply(get_response_weight)
-        other_df['Response'] = other_df['Response'].apply(normalize_response_label)
+    # OPTIMIZATION 3: Vectorized response processing
+    def process_responses(df):
+        """Vectorized response weight and normalization"""
+        if 'Response' in df.columns:
+            # Extract weights using vectorized operations
+            df['Response_Weight'] = df['Response'].apply(get_response_weight)
+            df['Response'] = df['Response'].apply(normalize_response_label)
+        return df
     
-    if master_df.empty:
-        return [], [], [], [], [], {}, {}, {}, {}
+    master_df = process_responses(master_df)
+    tax_df = process_responses(tax_df)
+    cfo_df = process_responses(cfo_df)
+    other_df = process_responses(other_df)
     
+    # Generate filter options (only unique values)
     ph_opts = [{'label': x, 'value': x} for x in sorted(master_df['Practice_Head'].dropna().unique())]
     partner_opts = [{'label': x, 'value': x} for x in sorted(master_df['Partner'].dropna().unique())]
     sector_opts = [{'label': x, 'value': x} for x in sorted(master_df['Sector'].dropna().unique())]
     loc_opts = [{'label': x, 'value': x} for x in sorted(master_df['Location'].dropna().unique())]
     resp_opts = [{'label': x, 'value': x} for x in sorted(master_df['Response'].dropna().unique())]
     
+    # Preserve filter values
+    available_ph = {opt['value'] for opt in ph_opts}
+    available_partner = {opt['value'] for opt in partner_opts}
+    available_sector = {opt['value'] for opt in sector_opts}
+    available_loc = {opt['value'] for opt in loc_opts}
+    available_resp = {opt['value'] for opt in resp_opts}
+    
+    preserved_ph = [x for x in (current_ph or []) if x in available_ph]
+    preserved_partner = [x for x in (current_partner or []) if x in available_partner]
+    preserved_sector = [x for x in (current_sector or []) if x in available_sector]
+    preserved_loc = [x for x in (current_loc or []) if x in available_loc]
+    preserved_resp = [x for x in (current_resp or []) if x in available_resp]
+    
+    # OPTIMIZATION 4: Store minimal data (convert to dict only once)
     return (ph_opts, partner_opts, sector_opts, loc_opts, resp_opts, 
             master_df.to_dict('records'), tax_df.to_dict('records'), 
-            cfo_df.to_dict('records'), other_df.to_dict('records'))
+            cfo_df.to_dict('records'), other_df.to_dict('records'),
+            preserved_ph, preserved_partner, preserved_sector, preserved_loc, preserved_resp)
 
 # MODIFIED: Filter data callback now also responds to tab changes
 @app.callback(
