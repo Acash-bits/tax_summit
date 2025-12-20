@@ -183,6 +183,24 @@ def get_response_weight(response):
     
     return 1  # Default weight is 1
 
+# Function to filter analysis tables based on master data filters
+def filter_analysis_table(analysis_df, filtered_master_df, practice_head_col='Practice_Head', partner_col='Partner'):
+    """Filter analysis table based on filtered master data"""
+    if analysis_df.empty or filtered_master_df.empty:
+        return analysis_df
+    
+    # Get unique Practice Heads and Partners from filtered master data
+    filtered_phs = filtered_master_df[practice_head_col].dropna().unique()
+    filtered_partners = filtered_master_df[partner_col].dropna().unique()
+    
+    # Filter analysis table
+    filtered_analysis = analysis_df[
+        (analysis_df[practice_head_col].isin(filtered_phs)) & 
+        (analysis_df[partner_col].isin(filtered_partners))
+    ].copy()
+    
+    return filtered_analysis
+
 # Layout components
 def create_summary_card(title, value, icon, color="primary"):
     return dbc.Card([
@@ -297,6 +315,7 @@ app.layout = dbc.Container([
     dcc.Store(id='cfo-data'),
     dcc.Store(id='other-data'),
     dcc.Store(id='filtered-data'),
+    dcc.Store(id='current-filters') # Store Current filter values
 ], fluid=True, style={'backgroundColor': '#f8f9fa', 'minHeight': '100vh'})
 
 # Callbacks
@@ -364,87 +383,100 @@ def load_data(n):
     if master_df.empty:
         return [], [], [], [], [], {}, {}, {}, {}
     
-    ph_opts = [{'label': x, 'value': x} for x in master_df['Practice_Head'].dropna().unique()]
-    partner_opts = [{'label': x, 'value': x} for x in master_df['Partner'].dropna().unique()]
-    sector_opts = [{'label': x, 'value': x} for x in master_df['Sector'].dropna().unique()]
-    loc_opts = [{'label': x, 'value': x} for x in master_df['Location'].dropna().unique()]
-    resp_opts = [{'label': x, 'value': x} for x in master_df['Response'].dropna().unique()]
+    ph_opts = [{'label': x, 'value': x} for x in sorted(master_df['Practice_Head'].dropna().unique())]
+    partner_opts = [{'label': x, 'value': x} for x in sorted(master_df['Partner'].dropna().unique())]
+    sector_opts = [{'label': x, 'value': x} for x in sorted(master_df['Sector'].dropna().unique())]
+    loc_opts = [{'label': x, 'value': x} for x in sorted(master_df['Location'].dropna().unique())]
+    resp_opts = [{'label': x, 'value': x} for x in sorted(master_df['Response'].dropna().unique())]
     
     return (ph_opts, partner_opts, sector_opts, loc_opts, resp_opts, 
             master_df.to_dict('records'), tax_df.to_dict('records'), 
             cfo_df.to_dict('records'), other_df.to_dict('records'))
 
+# MODIFIED: Filter data callback now also responds to tab changes
 @app.callback(
     Output('filtered-data', 'data'),
     [Input('master-data', 'data'),
-     Input('apply-filters', 'n_clicks'), 
-     Input('reset-filters', 'n_clicks')],
-    [State('practice-head-filter', 'value'),
-     State('partner-filter', 'value'), 
-     State('sector-filter', 'value'),
-     State('location-filter', 'value'), 
-     State('response-filter', 'value')]
+     Input('current-filters', 'data'),
+     Input('tabs', 'active_tab')],  # NEW: Added tab as input
 )
-def filter_data(data, apply, reset, ph, partner, sector, loc, resp):
-    ctx = callback_context
-    
-    if not data:
-        return []
+def filter_data(data, filters, active_tab):
+    if not data or not filters:
+        return data if data else []
     
     df = pd.DataFrame(data)
     
-    # Check what triggered the callback
-    triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else 'master-data'
-    
-    # On initial load (master-data) or reset button, return all data
-    if triggered_id == 'master-data' or triggered_id == 'reset-filters':
-        return df.to_dict('records')
-    
-    # Apply filters only when "Apply" button is clicked
-    if triggered_id == 'apply-filters':
-        if ph:
-            df = df[df['Practice_Head'].isin(ph)]
-        if partner:
-            df = df[df['Partner'].isin(partner)]
-        if sector:
-            df = df[df['Sector'].isin(sector)]
-        if loc:
-            df = df[df['Location'].isin(loc)]
-        if resp:
-            df = df[df['Response'].isin(resp)]
+    # Apply filters if they exist
+    if filters.get('ph'):
+        df = df[df['Practice_Head'].isin(filters['ph'])]
+    if filters.get('partner'):
+        df = df[df['Partner'].isin(filters['partner'])]
+    if filters.get('sector'):
+        df = df[df['Sector'].isin(filters['sector'])]
+    if filters.get('loc'):
+        df = df[df['Location'].isin(filters['loc'])]
+    if filters.get('resp'):
+        df = df[df['Response'].isin(filters['resp'])]
     
     return df.to_dict('records')
 
+# NEW: Reset filter values in UI
+@app.callback(
+    [Output('practice-head-filter', 'value'),
+     Output('partner-filter', 'value'),
+     Output('sector-filter', 'value'),
+     Output('location-filter', 'value'),
+     Output('response-filter', 'value')],
+    Input('reset-filters', 'n_clicks'),
+    prevent_initial_call=True
+)
+def reset_filter_values(n_clicks):
+    return None, None, None, None, None
+
 @app.callback(
     Output('tab-content', 'children'),
-    [Input('tabs', 'active_tab'), Input('filtered-data', 'data'),
-     Input('tax-data', 'data'), Input('cfo-data', 'data'), Input('other-data', 'data')]
+    [Input('tabs', 'active_tab'), 
+     Input('filtered-data', 'data'),
+     Input('master-data', 'data'),  # NEW: Added unfiltered master data
+     Input('tax-data', 'data'), 
+     Input('cfo-data', 'data'), 
+     Input('other-data', 'data')]
 )
-def render_content(tab, filtered, tax, cfo, other):
+
+def render_content(tab, filtered, master, tax, cfo, other):
     if not filtered:
         return html.Div("Loading...", className="text-center p-5")
     
     df = pd.DataFrame(filtered)
+    master_df = pd.DataFrame(master) if master else df  # Fallback to filtered if master not available
     tax_df = pd.DataFrame(tax)
     cfo_df = pd.DataFrame(cfo)
     other_df = pd.DataFrame(other)
     
+    # NEW: Filter analysis tables based on filtered master data
+    filtered_tax_df = filter_analysis_table(tax_df, df)
+    filtered_cfo_df = filter_analysis_table(cfo_df, df)
+    filtered_other_df = filter_analysis_table(other_df, df)
+    
     if tab == "overview":
         return create_overview_tab(df)
     elif tab == "practice-head":
-        return create_practice_head_tab(df, tax_df, cfo_df, other_df)
+        return create_practice_head_tab(df, filtered_tax_df, filtered_cfo_df, filtered_other_df)
     elif tab == "partner":
-        return create_partner_tab(df, tax_df, cfo_df, other_df)
+        return create_partner_tab(df, filtered_tax_df, filtered_cfo_df, filtered_other_df)
     elif tab == "tax":
-        return create_tax_tab(tax_df)
+        return create_tax_tab(filtered_tax_df)
     elif tab == "cfo":
-        return create_cfo_tab(cfo_df)
+        return create_cfo_tab(filtered_cfo_df)
     elif tab == "other":
-        return create_other_tab(other_df)
+        return create_other_tab(filtered_other_df)
     elif tab == "metrics":
         return create_metrics_tab(df)
 
 def create_overview_tab(df):
+    if df.empty:
+        return html.div('No Data Available for current filters', className = 'text-muted text-center p-5')
+    
     total_invites = len(df)
     total_invitees = df['numInvitees'].apply(safe_int).sum()
     total_reg = df['numRegistrations'].apply(safe_int).sum()
@@ -501,8 +533,13 @@ def create_overview_tab(df):
         
     ])
 
+
+# Group by Practice Head
 def create_practice_head_tab(df, tax_df, cfo_df, other_df):
-    # Group by Practice Head
+    # To show when there is no output in Practice Head Tab
+    if df.empty:
+        return html.Div("No data available for current filters", className="text-muted text-center p-5")
+    
     ph_stats = df.groupby('Practice_Head').agg({
         'Client_Name': 'count',
         'numInvitees': lambda x: x.apply(safe_int).sum(),
@@ -515,9 +552,21 @@ def create_practice_head_tab(df, tax_df, cfo_df, other_df):
     sector_by_ph = df.groupby(['Practice_Head', 'Sector']).size().reset_index(name='Count')
     location_by_ph = df.groupby(['Practice_Head', 'Location']).size().reset_index(name='Count')
     
-    cfo_by_ph = cfo_df.groupby(['Practice_Head', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
-    tax_by_ph = tax_df.groupby(['Practice_Head', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
-    other_by_ph = other_df.groupby(['Practice_Head', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    # Handle empty dataframes for designation analysis
+    if not cfo_df.empty:
+        cfo_by_ph = cfo_df.groupby(['Practice_Head', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    else:
+        cfo_by_ph = pd.DataFrame(columns=['Practice_Head', 'Response', 'Count'])
+    
+    if not tax_df.empty:
+        tax_by_ph = tax_df.groupby(['Practice_Head', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    else:
+        tax_by_ph = pd.DataFrame(columns=['Practice_Head', 'Response', 'Count'])
+    
+    if not other_df.empty:
+        other_by_ph = other_df.groupby(['Practice_Head', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    else:
+        other_by_ph = pd.DataFrame(columns=['Practice_Head', 'Response', 'Count'])
 
     return html.Div([
         html.H4("Practice Head Analysis", className="mb-4"),
@@ -594,7 +643,13 @@ def create_practice_head_tab(df, tax_df, cfo_df, other_df):
         ], className="mb-4"),
     ])
 
+# Group by Partner Name
 def create_partner_tab(df, tax_df, cfo_df, other_df):
+
+    # To show where there is not output in Partners Tab
+    if df.empty:
+        return html.Div("No data available for current filters", className="text-muted text-center p-5")
+
     partner_stats = df.groupby('Partner').agg({
         'Client_Name': 'count',
         'numInvitees': lambda x: x.apply(safe_int).sum(),
@@ -606,9 +661,21 @@ def create_partner_tab(df, tax_df, cfo_df, other_df):
     response_by_partner = df.groupby(['Partner', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
     location_by_partner = df.groupby(['Partner', 'Location']).size().reset_index(name='Count')
     
-    tax_by_partner = tax_df.groupby(['Partner', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
-    cfo_by_partner = cfo_df.groupby(['Partner', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
-    other_by_partner = other_df.groupby(['Partner', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    #Handle empty dataframes for designation analysis
+    if not tax_df.empty:
+        tax_by_partner = tax_df.groupby(['Partner', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    else:
+        tax_by_partner = pd.DataFrame(columns=['Partner', 'Response', 'Count'])
+    
+    if not cfo_df.empty:
+        cfo_by_partner = cfo_df.groupby(['Partner', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    else:
+        cfo_by_partner = pd.DataFrame(columns=['Partner', 'Response', 'Count'])
+    
+    if not other_df.empty:
+        other_by_partner = other_df.groupby(['Partner', 'Response'])['Response_Weight'].sum().reset_index(name='Count')
+    else:
+        other_by_partner = pd.DataFrame(columns=['Partner', 'Response', 'Count'])
 
     return html.Div([
         html.H4("Partner Analysis", className="mb-4"),
@@ -677,6 +744,10 @@ def create_partner_tab(df, tax_df, cfo_df, other_df):
     ])
 
 def create_tax_tab(tax_df):
+    # To show when where there is no output in Tax Tab
+    if tax_df.empty:
+        return html.Div("No data available for current filters", className="text-muted text-center p-5")
+
     total = len(tax_df)
     registered = len(tax_df[tax_df['Response_1'].str.lower() == 'registered'])
     responses = tax_df.groupby('Response')['Response_Weight'].sum()
@@ -817,6 +888,10 @@ def create_tax_tab(tax_df):
     
 
 def create_cfo_tab(cfo_df):
+    # To show where there is not output in CFO_tab
+    if cfo_df.empty:
+        return html.Div("No data available for current filters", className="text-muted text-center p-5")
+
     total = len(cfo_df)
     registered = len(cfo_df[cfo_df['Response_7'].str.lower() == 'registered'])
     responses = cfo_df.groupby('Response')['Response_Weight'].sum()
@@ -958,6 +1033,10 @@ def create_cfo_tab(cfo_df):
     ])
 
 def create_other_tab(other_df):
+    # To show when there is no output in Others tab
+    if other_df.empty:
+        return html.Div("No data available for current filters", className="text-muted text-center p-5")
+
     total = len(other_df)
     registered = len(other_df[other_df['Response_13'].str.lower() == 'registered'])
     responses = other_df.groupby('Response')['Response_Weight'].sum()
@@ -1086,6 +1165,10 @@ def create_other_tab(other_df):
     ])
 
 def create_metrics_tab(df):
+    # To show when there is no output in the metrics tab
+    if df.empty:
+        return html.Div("No data available for current filters", className="text-muted text-center p-5")
+    
     total_invitees = df['numInvitees'].apply(safe_int).sum()
     total_reg = df['numRegistrations'].apply(safe_int).sum()
     conversion_rate = calculate_conversion_rate(total_reg, total_invitees)
