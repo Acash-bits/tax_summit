@@ -443,6 +443,46 @@ def reset_filter_values(n_clicks):
      Input('other-data', 'data')]
 )
 
+@app.callback(
+    Output('current-filters', 'data'),
+    [Input('apply-filters', 'n_clicks'),
+     Input('reset-filters', 'n_clicks')],
+    [State('practice-head-filter', 'value'),
+     State('partner-filter', 'value'),
+     State('sector-filter', 'value'),
+     State('location-filter', 'value'),
+     State('response-filter', 'value')],
+    prevent_initial_call=True
+)
+def update_filters(apply_clicks, reset_clicks, ph, partner, sector, loc, resp):
+    """Store current filter values when Apply or Reset is clicked"""
+    ctx = callback_context
+    
+    if not ctx.triggered:
+        return {}
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # If Reset was clicked, return empty filters
+    if button_id == 'reset-filters':
+        return {
+            'ph': [],
+            'partner': [],
+            'sector': [],
+            'loc': [],
+            'resp': []
+        }
+    
+    # If Apply was clicked, store current values
+    return {
+        'ph': ph or [],
+        'partner': partner or [],
+        'sector': sector or [],
+        'loc': loc or [],
+        'resp': resp or []
+    }
+
+
 def render_content(tab, filtered, master, tax, cfo, other):
     if not filtered:
         return html.Div("Loading...", className="text-center p-5")
