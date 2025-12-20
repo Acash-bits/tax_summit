@@ -433,15 +433,6 @@ def filter_data(data, filters, active_tab):
 def reset_filter_values(n_clicks):
     return None, None, None, None, None
 
-@app.callback(
-    Output('tab-content', 'children'),
-    [Input('tabs', 'active_tab'), 
-     Input('filtered-data', 'data'),
-     Input('master-data', 'data'),  # NEW: Added unfiltered master data
-     Input('tax-data', 'data'), 
-     Input('cfo-data', 'data'), 
-     Input('other-data', 'data')]
-)
 
 @app.callback(
     Output('current-filters', 'data'),
