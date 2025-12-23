@@ -520,7 +520,8 @@ def create_overview_tab(df):
     total_invites = len(df)
     total_invitees = df['numInvitees'].apply(safe_int).sum()
     total_reg = df['numRegistrations'].apply(safe_int).sum()
-    resp_rate = round((df['Response'].notna().sum() / len(df) * 100), 2) if len(df) > 0 else 0
+    resp_rate = round((df[df['Response'].str.lower() != 'awaited']['Response'].notna().sum() / len(df) * 100), 2) if len(df) > 0 else 0
+
     
     # Weighted response distribution
     resp_dist = df.groupby('Response')['Response_Weight'].sum()
@@ -831,7 +832,7 @@ def create_tax_tab(tax_df):
             dbc.Col(create_summary_card("Total Invited", total, "envelope", "primary"), md=4),
             dbc.Col(create_summary_card("Total Registered", registered, "check-circle", "success"), md=4),
             dbc.Col(create_summary_card("Response Rate", 
-                                       f"{round(tax_df['Response'].notna().sum()/total*100,2) if total>0 else 0}%", 
+                                       f"{round(tax_df[tax_df['Response'].str.lower() != 'awaited']['Response'].notna().sum()/total*100,2) if total>0 else 0}%", 
                                        "percentage", "info"), md=4),
         ], className="mb-4"),   
         
@@ -974,7 +975,7 @@ def create_cfo_tab(cfo_df):
             dbc.Col(create_summary_card("Total Invited", total, "envelope", "primary"), md=4),
             dbc.Col(create_summary_card("Total Registered", registered, "check-circle", "success"), md=4),
             dbc.Col(create_summary_card("Response Rate", 
-                                       f"{round(cfo_df['Response'].notna().sum()/total*100,2) if total>0 else 0}%", 
+                                       f"{round(cfo_df[cfo_df['Response'].str.lower() != 'awaited']['Response'].notna().sum()/total*100,2) if total>0 else 0}%", 
                                        "percentage", "info"), md=4),
         ], className="mb-4"),
         
@@ -1119,7 +1120,7 @@ def create_other_tab(other_df):
             dbc.Col(create_summary_card("Total Invited", total, "envelope", "primary"), md=4),
             dbc.Col(create_summary_card("Total Registered", registered, "check-circle", "success"), md=4),
             dbc.Col(create_summary_card("Response Rate", 
-                                       f"{round(other_df['Response'].notna().sum()/total*100,2) if total>0 else 0}%", 
+                                       f"{round(other_df[other_df['Response'].str.lower() != 'awaited']['Response'].notna().sum()/total*100,2) if total>0 else 0}%", 
                                        "percentage", "info"), md=4),
         ], className="mb-4"),
         
