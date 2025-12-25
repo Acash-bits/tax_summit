@@ -176,13 +176,6 @@ graph TB
     C -->|vcard_generators| G[Contact Files .vcf]
     D -->|Filtered Data| F
     F -->|Web Interface| H[Users]
-    
-    style A fill:#02283B
-    style B fill:#ffe1e1
-    style C fill:#fff4e1
-    style D fill:#e1ffe1
-    style F fill:#f0e1ff
-    style G fill:#ffe1f5
 ```
 
 ---
@@ -442,11 +435,6 @@ graph LR
     
     E --> J[Delete from Child Tables]
     E --> K[Delete from Analysis Tables]
-    
-    style A fill:#ffe1e1
-    style C fill:#e1ffe1
-    style D fill:#fff4e1
-    style E fill:#ffe1f5
 ```
 
 ### 1️⃣ INSERT Trigger
@@ -553,10 +541,6 @@ graph TB
     
     J --> K[Users See Real-time Data]
     
-    style A fill:#e1f5ff
-    style G fill:#fff4e1
-    style H fill:#e1ffe1
-    style J fill:#f0e1ff
 ```
 
 ### Sync Mode Comparison
@@ -598,10 +582,6 @@ graph TB
     M --> I
     M --> J
     M --> K
-    
-    style B fill:#f0e1ff
-    style C fill:#ffe1e1
-    style E fill:#e1f5ff
 ```
 
 ### Key Dashboard Features
@@ -807,12 +787,6 @@ graph TB
     C --> J[Update Contact_Created_Status]
     D --> J
     E --> J
-    
-    style A fill:#fff4e1
-    style F fill:#e1ffe1
-    style G fill:#e1ffe1
-    style H fill:#e1ffe1
-    style I fill:#f0e1ff
 ```
 
 ### vCard Generation Process
@@ -1050,10 +1024,6 @@ graph TB
     H --> B
     
     B --> I[Railway Dashboard App]
-    
-    style A fill:#e1f5ff
-    style B fill:#ffe1e1
-    style I fill:#f0e1ff
 ```
 
 ### Railway Scripts
@@ -1177,11 +1147,6 @@ graph TB
     
     C --> I[Auto-refresh: 60s]
     I --> F
-    
-    style A fill:#ffe1e1
-    style B fill:#fff4e1
-    style F fill:#f0e1ff
-    style G fill:#e1ffe1
 ```
 
 ### Deployment Configuration
