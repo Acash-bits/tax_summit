@@ -76,6 +76,28 @@ def create_table_from_dataframe(connection, table_name, df, unique_column='compa
     finally:
         cursor.close()
 
+def ensure_unique_constraint(connection, table_name, unique_column):
+    """Ensure the unique column has a UNIQUE index"""
+    cursor = connection.cursor()
+    try:
+        # Check if unique index exists
+        cursor.execute(f"SHOW INDEX FROM `{table_name}` WHERE Column_name = '{unique_column}' AND Non_unique = 0")
+        if not cursor.fetchone():
+            print(f"Adding missing UNIQUE constraint on '{unique_column}'...")
+            try:
+                cursor.execute(f"ALTER TABLE `{table_name}` ADD UNIQUE (`{unique_column}`)")
+                connection.commit()
+                print("✓ Unique constraint added")
+            except Error as e:
+                print(f"⚠️ Could not add unique constraint: {e}")
+                print("  This usually means you have duplicate values in this column.")
+                print("  Upsert will NOT work correctly without this constraint.")
+                print("  Please manually remove duplicates from the database.")
+    except Error as e:
+        print(f"Error checking constraints: {e}")
+    finally:
+        cursor.close()
+
 def insert_data_to_mysql(connection, table_name, df):
     """
     Insert DataFrame data into MySQL table (only new records)
@@ -256,6 +278,10 @@ def excel_to_mysql(excel_file, sheet_name, host, user, password, database, table
             print(f"Excel file loaded: {len(df)} rows, {len(df.columns)} columns")
             print(f"Cleaned columns: {list(df.columns)}")
             
+            # Trim whitespace from all string columns
+            for col in df.select_dtypes(['object']).columns:
+                df[col] = df[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
+            
             # Update unique_column to cleaned version
             unique_column_clean = unique_column.strip().replace(' ', '_').replace('#', 'num').replace('-', '_')
             unique_column_clean = ''.join(c if c.isalnum() or c == '_' else '_' for c in unique_column_clean)
@@ -296,6 +322,7 @@ def excel_to_mysql(excel_file, sheet_name, host, user, password, database, table
         # Create table with unique constraint
         create_table_from_dataframe(connection, table_name, df, unique_column_clean)
         
+        ensure_unique_constraint(connection, table_name, unique_column_clean)
         sync_table_schema(connection, table_name, df)
 
         # Sync data based on mode
