@@ -117,8 +117,30 @@ def insert_data_to_mysql(connection, table_name, df):
         connection.commit()
         print(f"{cursor.rowcount} new rows inserted into '{table_name}'")
     except Error as e:
-        print(f"Error inserting data: {e}")
+        print(f"Batch insert failed: {e}")
+        print("Switching to row-by-row processing to identify and skip problematic rows...")
         connection.rollback()
+        
+        success_count = 0
+        skipped_count = 0
+        
+        for i, row in enumerate(data):
+            try:
+                cursor.execute(insert_query, row)
+                success_count += 1
+            except Error as row_error:
+                if row_error.errno == 1406:  # Data too long
+                    print(f"  ⚠️  Skipping row {i+2}: Data too long. {row_error}")
+                    skipped_count += 1
+                else:
+                    print(f"  ❌ Error on row {i+2}: {row_error}")
+                    skipped_count += 1
+        
+        try:
+            connection.commit()
+            print(f"✓ Recovered: {success_count} rows processed, {skipped_count} rows skipped")
+        except Error as commit_error:
+            print(f"Error committing changes: {commit_error}")
     finally:
         cursor.close()
 
@@ -151,8 +173,30 @@ def upsert_data_to_mysql(connection, table_name, df, unique_column='company_name
         connection.commit()
         print(f"{cursor.rowcount} rows inserted/updated in '{table_name}'")
     except Error as e:
-        print(f"Error upserting data: {e}")
+        print(f"Batch upsert failed: {e}")
+        print("Switching to row-by-row processing to identify and skip problematic rows...")
         connection.rollback()
+        
+        success_count = 0
+        skipped_count = 0
+        
+        for i, row in enumerate(data):
+            try:
+                cursor.execute(upsert_query, row)
+                success_count += 1
+            except Error as row_error:
+                if row_error.errno == 1406:  # Data too long
+                    print(f"  ⚠️  Skipping row {i+2}: Data too long. {row_error}")
+                    skipped_count += 1
+                else:
+                    print(f"  ❌ Error on row {i+2}: {row_error}")
+                    skipped_count += 1
+        
+        try:
+            connection.commit()
+            print(f"✓ Recovered: {success_count} rows processed, {skipped_count} rows skipped")
+        except Error as commit_error:
+            print(f"Error committing changes: {commit_error}")
     finally:
         cursor.close()
 
